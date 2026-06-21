@@ -45,28 +45,24 @@ what it covers — nxvim-line is built entirely on it:
 - **Highlights**: `nx.hl.define(name, spec)` / `nx.hl.get` / `nx.hl.exists` — define the
   section/component groups and **auto-derive a theme** by reading the active colorscheme.
 - **Global statusline**: `vim.o.laststatus = 3` (a single bottom bar) is supported.
+- **`ModeChanged` autocmd** (landed in nxvim core, commit `c7c3ce2d`, 2026-06-21 — the
+  one editor seam this plan originally needed, built first). Fires on any change to the
+  reported `mode()` code with the pattern `old:new` (e.g. `"n:i"`, `"v:n"`),
+  glob-matchable (`"*:i"`, `"n:*"`, `"*:*"`); a handler reads the transition off
+  `args.match`. Gated on a registered handler (no cost when nothing listens); a
+  Normal↔MultiCursor swap (both report `"n"`) is silent. This is the precise driver for
+  lualine's signature **whole-section recolour by mode** — Phase 4 subscribes to it
+  directly, no polling.
 
 What the editor does **not** yet provide — the load-bearing gaps this plan must design
 around (loud, not papered over):
 
-1. ~~**No `ModeChanged` autocmd.**~~ **LANDED** in nxvim core (commit `c7c3ce2d`,
-   2026-06-21) — the one editor dependency this plan called out, built first. It fires on
-   any change to the reported `mode()` code with the pattern `old:new` (e.g. `"n:i"`,
-   `"v:n"`), glob-matchable (`"*:i"`, `"n:*"`); a handler reads the transition off
-   `args.match`. Gated on a registered handler (no cost when nothing listens); a
-   Normal↔MultiCursor swap (both report `"n"`) is silent. So Phase 4's mode-reactive
-   recolour can take the precise event path directly — the `InsertEnter`/timer fallback
-   below is now only a defensive belt, not a necessity. (lualine's signature is the
-   **whole section recolouring by mode**, which for a *custom* segment needs a re-render
-   on every mode change; this is that seam, in the "companion core seam" pattern the
-   sibling plugins use — nxvim-diff added `WinScrolled`, `nx.win.set_topline`,
-   `nx.buf.set_lines`.)
-2. **No `winbar` option**, and the custom `tabline` stays on the `%`-format path (never a
+1. **No `winbar` option**, and the custom `tabline` stays on the `%`-format path (never a
    segment layout). So winbar is out of scope (a core dependency) and tabline support, if
    any, is `%`-format-driven — see Phase 7 / Out of scope.
-3. **No bundled devicons.** Like nxvim-tree, nxvim-line ships its **own** filetype/icon
+2. **No bundled devicons.** Like nxvim-tree, nxvim-line ships its **own** filetype/icon
    registry (overridable, and able to defer to a user-provided icon function).
-4. **No `searchcount` / no diff-against-HEAD primitive.** Search-count and git data are
+3. **No `searchcount` / no diff-against-HEAD primitive.** Search-count and git data are
    computed in the plugin (git via `nx.run`); both are async/cached + `invalidate()`.
 
 ## Architecture at a glance
@@ -82,7 +78,7 @@ setup(config) ─► config.validate ─► compile.build
    nx.statusline.setup{ left = {A,B,C}, right = {X,Y,Z} }   (built-ins pass through)
    nx.hl.define(...)  section/mode/component groups (theme)
    event wiring:  each component's events ─► invalidate its section
-                  ModeChanged (or fallback) ─► re-theme + invalidate mode-coloured
+                  ModeChanged (old:new) ─► re-theme + invalidate mode-coloured sections
 ```
 
 The design choice: **one custom segment per lualine section** (not per component). A
@@ -175,29 +171,41 @@ The lualine *look*, still no mode-reactive colour.
   per-component `color` defines and applies a group; padding widens a cell; empty
   separators degrade cleanly.
 
-## Phase 4 — Themes + mode-reactive colour (editor dependency ✅ landed)
+## Phase 4 — Themes + mode-reactive colour
 
-The signature lualine experience: section A (and the powerline edges) recolour by mode.
+The signature lualine experience: the bar recolours by mode (most visibly section A and
+the powerline edges). The `ModeChanged` core seam (now available — see *What the editor
+provides*) makes this **event-driven and precise**, with no polling.
 
-- **`themes/`** — theme tables in lualine's shape (`{ normal = { a = {fg,bg}, b, c },
-  insert = {...}, visual, replace, command, inactive }`), a few bundled
-  (`auto`, plus e.g. a 16-colour fallback). **`auto`** derives the palette by reading the
-  active colorscheme's groups via `nx.hl.get` (`Normal`, `StatusLine`, `Function`,
-  `String`, `Error`, …) — no hard dependency on any one scheme.
-- **Mode-reactive recolour** — on a mode change, redefine the `NxLineA*` / mode groups
-  for the new mode and invalidate the mode-coloured sections. Drive it via:
-  - **Preferred: the `ModeChanged` autocmd** — ✅ landed in nxvim-core (commit `c7c3ce2d`).
-    Subscribe with `nx.autocmd.create("ModeChanged", { pattern = "*:*", callback = … })`
-    and read the `old:new` transition off `args.match`; redefine the mode groups for the
-    new mode and invalidate the mode-coloured sections.
-  - **Fallback (no core change), ships first**: cover `InsertEnter`/`InsertLeave` for the
-    big transition, and a bounded `nx.timer` poll of `nx.mode()` (at `options.refresh`)
-    that invalidates only when the mode string actually changes — lualine itself carries a
-    refresh timer, so this is faithful, just coarser for visual/command transitions. The
-    plugin auto-selects the precise path once `ModeChanged` exists.
-- **Tests**: a theme table colours the sections; `auto` produces non-nil groups from a
-  loaded scheme; mode change (drive `i`/`v`/`:`) recolours section A (precise path under
-  the new event; the fallback's timer path verified with a short interval).
+- **`themes/`** — theme tables in lualine's shape: per-mode palettes
+  `{ normal = { a = {fg,bg,gui}, b, c }, insert = {...}, visual, replace, command,
+  terminal, inactive }`, a few bundled (`auto`, plus a 16-colour fallback). x/y/z mirror
+  c/b/a as lualine does. **`auto`** derives the palette by reading the active
+  colorscheme's groups via `nx.hl.get` (`Normal`, `StatusLine`, `Function`, `String`,
+  `Error`, …) — no hard dependency on any one scheme. `register_theme(name, table)` adds
+  one.
+- **Highlight groups, pre-defined once.** `compile`/`highlights` defines a group per
+  `(section, mode)` from the theme up front — `NxLine<Section>_<mode>` (e.g.
+  `NxLineA_normal`, `NxLineA_insert`, …) via `nx.hl.define` — so no group is created on
+  the hot path. The mode key comes from a **mode-code → theme-mode** resolver (`n →
+  normal`, `i → insert`, `v`/`V → visual`, `R → replace`, `c → command`, `t → terminal`;
+  unknown → `normal`).
+- **Mode-reactive render.** Each section's `render(ctx)` reads the current mode
+  (`nx.mode()`), maps it through the resolver, and emits its cells (and the powerline
+  separator transition cells, whose colours depend on the adjacent sections' *current*
+  bg) in the mode-appropriate groups. So the `mode` component becomes a **custom** cell
+  here (carrying its mode group), rather than the Phase-1 built-in pass-through.
+- **The driver.** One `nx.autocmd.create("ModeChanged", { pattern = "*:*", callback })`
+  invalidates every theme-coloured section (`nx.statusline.invalidate` per `NxLine*`).
+  Because the groups are pre-defined and `render` just picks by the new mode, the
+  re-render is cheap; mode changes are infrequent (never per-keystroke), so this is well
+  within the no-frame-time-Lua budget. (A component with an explicit `color` override
+  opts out of the mode palette — its cell keeps its fixed group.)
+- **Tests** (`test/theme_spec.lua`): a theme table colours the sections; `auto` produces
+  non-nil groups from a loaded scheme; the code→theme-mode resolver maps each mode;
+  driving `i` / `v` / `:` recolours section A via `ModeChanged` (assert the cell's `hl`
+  group flips to `NxLineA_insert`/`_visual`/`_command` in the projected `status`), and
+  `<Esc>` restores `_normal`.
 
 ## Phase 5 — Inactive windows, conditions, clicks, refresh, globalstatus
 
@@ -209,7 +217,9 @@ The signature lualine experience: section A (and the powerline edges) recolour b
 - **`on_click`** — per-component `on_click = function(...)` registered as a `v:lua.<fn>`
   and threaded onto the cell (the native click bridge).
 - **`refresh`** — `options.refresh = { statusline = ms }` drives a periodic
-  `invalidate` of time-varying sections (and the Phase 4 fallback poll).
+  `invalidate` of time-varying sections (e.g. a clock component). Mode colour is *not*
+  on this timer — it is event-driven via `ModeChanged` (Phase 4) — so the refresh can
+  stay coarse (lualine's default 1 s) without making mode transitions feel laggy.
 - **`globalstatus`** — `true` → `laststatus = 3`; the layout renders once for the global
   bar; component `ctx` uses the current window.
 - **Tests**: an inactive split shows `inactive_sections`; `cond=false` hides a component;
