@@ -49,15 +49,18 @@ what it covers — nxvim-line is built entirely on it:
 What the editor does **not** yet provide — the load-bearing gaps this plan must design
 around (loud, not papered over):
 
-1. **No `ModeChanged` autocmd.** Mode is tracked (`nx._cur_mode`, refreshed before each
-   Lua chunk) and the built-in `mode` segment re-resolves every frame, but the only
-   mode-transition events are `InsertEnter` / `InsertLeave`. lualine's signature is the
-   **whole section recolouring by mode** (normal/insert/visual/replace/command) — for a
-   *custom* segment that needs a re-render on every mode change. This is the one real
-   **editor dependency** (Phase 4). It is the faithful neovim event and squarely in the
-   "companion core seam" pattern the sibling plugins use (nxvim-diff added `WinScrolled`,
-   `nx.win.set_topline`, `nx.buf.set_lines`). A no-core fallback ships first so earlier
-   phases stand alone.
+1. ~~**No `ModeChanged` autocmd.**~~ **LANDED** in nxvim core (commit `c7c3ce2d`,
+   2026-06-21) — the one editor dependency this plan called out, built first. It fires on
+   any change to the reported `mode()` code with the pattern `old:new` (e.g. `"n:i"`,
+   `"v:n"`), glob-matchable (`"*:i"`, `"n:*"`); a handler reads the transition off
+   `args.match`. Gated on a registered handler (no cost when nothing listens); a
+   Normal↔MultiCursor swap (both report `"n"`) is silent. So Phase 4's mode-reactive
+   recolour can take the precise event path directly — the `InsertEnter`/timer fallback
+   below is now only a defensive belt, not a necessity. (lualine's signature is the
+   **whole section recolouring by mode**, which for a *custom* segment needs a re-render
+   on every mode change; this is that seam, in the "companion core seam" pattern the
+   sibling plugins use — nxvim-diff added `WinScrolled`, `nx.win.set_topline`,
+   `nx.buf.set_lines`.)
 2. **No `winbar` option**, and the custom `tabline` stays on the `%`-format path (never a
    segment layout). So winbar is out of scope (a core dependency) and tabline support, if
    any, is `%`-format-driven — see Phase 7 / Out of scope.
@@ -172,7 +175,7 @@ The lualine *look*, still no mode-reactive colour.
   per-component `color` defines and applies a group; padding widens a cell; empty
   separators degrade cleanly.
 
-## Phase 4 — Themes + mode-reactive colour (the editor dependency)
+## Phase 4 — Themes + mode-reactive colour (editor dependency ✅ landed)
 
 The signature lualine experience: section A (and the powerline edges) recolour by mode.
 
@@ -183,11 +186,10 @@ The signature lualine experience: section A (and the powerline edges) recolour b
   `String`, `Error`, …) — no hard dependency on any one scheme.
 - **Mode-reactive recolour** — on a mode change, redefine the `NxLineA*` / mode groups
   for the new mode and invalidate the mode-coloured sections. Drive it via:
-  - **Preferred: a `ModeChanged` autocmd in nxvim-core** — the one **editor change** this
-    plugin needs. A minimal, faithful seam: fire `ModeChanged` (with `old`/`new` mode in
-    the callback data, like neovim) wherever `nx._cur_mode` transitions. This is the clean
-    enabler and matches the sibling-plugin "companion core seam" pattern. *(Land it in the
-    nxvim repo; gate the plugin path on `nx.autocmd` accepting the event.)*
+  - **Preferred: the `ModeChanged` autocmd** — ✅ landed in nxvim-core (commit `c7c3ce2d`).
+    Subscribe with `nx.autocmd.create("ModeChanged", { pattern = "*:*", callback = … })`
+    and read the `old:new` transition off `args.match`; redefine the mode groups for the
+    new mode and invalidate the mode-coloured sections.
   - **Fallback (no core change), ships first**: cover `InsertEnter`/`InsertLeave` for the
     big transition, and a bounded `nx.timer` poll of `nx.mode()` (at `options.refresh`)
     that invalidates only when the mode string actually changes — lualine itself carries a
