@@ -13,32 +13,59 @@
 --
 -- Module map (one concern each — filled in across the phased plan in
 -- docs/plans/2026-06-21-nxvim-line.md):
---   config.lua      defaults + validated merge of the lualine-shaped config
---   compile.lua     config -> native nx.statusline segments + event wiring (the core)
---   components/      the component library (mode, branch, diff, diagnostics, filename,
---                    filetype, fileformat, encoding, progress, location, lsp, …)
---   highlights.lua   per-section / per-mode highlight groups + section/component seps
---   themes/          theme tables (auto, plus a few bundled) + colorscheme auto-derive
---   git.lua          async branch + diff counts via nx.run, cached + invalidated
---   icons.lua        filetype/extension -> glyph registry (overridable)
---   extensions.lua   per-filetype layout overrides (nxvim-tree, quickfix, …)
+--   config.lua      defaults + validated merge of the lualine-shaped config  (Phase 1 ✅)
+--   compile.lua     config -> native nx.statusline segments + event wiring   (Phase 1 ✅)
+--   components.lua  the component registry + library                         (Phase 1 ✅, grows)
+--   highlights.lua  per-section / per-mode highlight groups + separators      (Phase 3/4)
+--   themes/         theme tables + colorscheme auto-derive                    (Phase 4)
+--   git.lua         async branch + diff counts via nx.run                     (Phase 6)
+--   icons.lua       filetype/extension -> glyph registry                      (Phase 3)
+--   extensions.lua  per-filetype layout overrides                            (Phase 7)
 --
 -- Quick start (init.lua):
---   require("nxvim-line").setup({ theme = "auto" })
---
--- See README.md for the full configuration surface and docs/plans/ for the build order.
+--   require("nxvim-line").setup({ options = { theme = "auto" } })
+
+local config = require("nxvim-line.config")
+local compile = require("nxvim-line.compile")
+local components = require("nxvim-line.components")
 
 local M = {}
 
 -- The effective configuration, rebuilt from defaults on every setup().
 M.config = nil
 
--- nxvim-line is scaffolded; the implementation lands across the phases in
--- docs/plans/2026-06-21-nxvim-line.md. Fail LOUD until Phase 1 wires setup() to the
--- compiler — a stub that quietly no-ops would make a broken statusline look configured
--- (CLAUDE.md: no silent stubs).
-function M.setup(_opts)
-  error("nxvim-line: not implemented yet — see docs/plans/2026-06-21-nxvim-line.md (Phase 1)")
+-- setup(opts): merge `opts` over the defaults, validate, and lower the result onto
+-- nx.statusline. Idempotent — calling it again tears down the prior layout/events and
+-- rebuilds (no second statusline). Fails loud on a bad config (unknown component, …).
+function M.setup(opts)
+  M.config = config.merge(config.defaults(), opts)
+  compile.build(M.config)
+  return M
+end
+
+-- refresh(): force a re-render of every active section (e.g. after changing external
+-- state a component reads but has no event for).
+function M.refresh()
+  if not M.config then
+    error("nxvim-line: setup() must be called before refresh()")
+  end
+  compile.invalidate_all()
+end
+
+-- register_component(name, spec): add a custom component (`spec = { events = {...},
+-- provide = function(ctx, opts) -> { text=, hl?, icon? } | nil }`) usable by name in
+-- `sections`. Register it BEFORE setup() so config validation sees it.
+function M.register_component(name, spec)
+  components.register(name, spec)
+  return M
+end
+
+-- Themes land in Phase 4; expose a loud placeholder so a call fails clearly rather
+-- than silently no-op (CLAUDE.md: no silent stubs).
+function M.register_theme()
+  error(
+    "nxvim-line: themes (register_theme) land in Phase 4 — see docs/plans/2026-06-21-nxvim-line.md"
+  )
 end
 
 return M

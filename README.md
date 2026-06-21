@@ -21,10 +21,13 @@ require("nxvim-line").setup({
 })
 ```
 
-> **Status: scaffolding.** This repo currently holds the skeleton and the phased
-> implementation plan ([`docs/plans/2026-06-21-nxvim-line.md`](docs/plans/2026-06-21-nxvim-line.md)).
-> `setup()` errors loud until Phase 1 lands. The sections below describe the **target**
-> design — they double as the plan's config contract.
+> **Status: Phase 1 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
+> works: the config model + the lualine→`nx.statusline` compiler, with the `mode`,
+> `filename`, `filetype`, `diagnostics`, `progress`, and `location` components (plain
+> text — separators, icons, and per-mode theme colour arrive in later phases). The
+> components/themes below that aren't in that list (`branch`, `diff`, `encoding`,
+> `fileformat`, `lsp`, `searchcount`, themes) are **planned** — naming one in `sections`
+> errors loud until its phase lands. The sections below describe the **target** design.
 
 ## How it works
 
