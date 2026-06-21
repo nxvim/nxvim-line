@@ -76,7 +76,7 @@ setup(config) ─► config.validate ─► compile.build
    powerline separators in the section highlight.
                                        │
    nx.statusline.setup{ left = {A,B,C}, right = {X,Y,Z} }   (built-ins pass through)
-   nx.hl.define(...)  section/mode/component groups (theme)
+   nx.hl.define(...)  lualine_<section>_<mode> groups, from the theme
    event wiring:  each component's events ─► invalidate its section
                   ModeChanged (old:new) ─► re-theme + invalidate mode-coloured sections
 ```
@@ -177,35 +177,50 @@ The signature lualine experience: the bar recolours by mode (most visibly sectio
 the powerline edges). The `ModeChanged` core seam (now available — see *What the editor
 provides*) makes this **event-driven and precise**, with no polling.
 
-- **`themes/`** — theme tables in lualine's shape: per-mode palettes
-  `{ normal = { a = {fg,bg,gui}, b, c }, insert = {...}, visual, replace, command,
-  terminal, inactive }`, a few bundled (`auto`, plus a 16-colour fallback). x/y/z mirror
-  c/b/a as lualine does. **`auto`** derives the palette by reading the active
-  colorscheme's groups via `nx.hl.get` (`Normal`, `StatusLine`, `Function`, `String`,
-  `Error`, …) — no hard dependency on any one scheme. `register_theme(name, table)` adds
-  one.
-- **Highlight groups, pre-defined once.** `compile`/`highlights` defines a group per
-  `(section, mode)` from the theme up front — `NxLine<Section>_<mode>` (e.g.
-  `NxLineA_normal`, `NxLineA_insert`, …) via `nx.hl.define` — so no group is created on
-  the hot path. The mode key comes from a **mode-code → theme-mode** resolver (`n →
-  normal`, `i → insert`, `v`/`V → visual`, `R → replace`, `c → command`, `t → terminal`;
-  unknown → `normal`).
+**Compatibility is the point here** — adopt lualine's theme-table shape, its theme
+*resolution*, and its generated highlight-group *names*, so an existing lualine theme
+(and a colorscheme's lualine integration, e.g. catppuccin) drops in unchanged.
+
+- **`themes/`** — theme tables in lualine's exact shape: per-mode palettes
+  `{ normal = { a = {fg,bg,gui}, b, c }, insert, visual, replace, command, terminal,
+  inactive }`. Per lualine's rules, **x/y/z default to c/b/a**, and **any unspecified
+  mode defaults to `normal`**; a cell may be a `{fg,bg,gui}` table **or a string naming a
+  highlight group to link to**. Resolution mirrors lualine: `options.theme` is a table
+  (used as-is), or a name resolved **bundled theme → `require("lualine.themes.<name>")`
+  → error** — so `theme = "catppuccin"` loads catppuccin's own lualine theme module
+  (a self-contained palette table; it works because nxvim already runs catppuccin's
+  colorscheme and the theme module is pure Lua on the runtimepath). `auto` derives a
+  palette by reading the active colorscheme via `nx.hl.get` (`Normal`, `StatusLine`,
+  `Function`, `String`, `Error`, …). `register_theme(name, table)` adds one.
+- **Highlight groups, lualine-named, pre-defined once.** `compile`/`highlights` defines a
+  group per `(section, mode)` from the theme up front under **lualine's own naming** —
+  `lualine_<section>_<mode>` (e.g. `lualine_a_normal`, `lualine_a_insert`,
+  `lualine_c_inactive`) via `nx.hl.define`. Using lualine's *highlight-group* names
+  (rather than a private group scheme) means a colorscheme or user override that already
+  styles `lualine_a_normal` just applies, and the surface is the one lualine users know.
+  (The `nx.statusline` *segment* registry names — `NxLineA`…`NxLineZ` — are a separate,
+  private namespace and don't collide with these groups.) x/y/z link to the c/b/a group
+  of the same mode. Nothing is created on the hot path. The mode key comes from a
+  **mode-code → theme-mode** resolver (`n → normal`, `i → insert`, `v`/`V → visual`,
+  `R → replace`, `c → command`, `t → terminal`; unknown → `normal`).
 - **Mode-reactive render.** Each section's `render(ctx)` reads the current mode
   (`nx.mode()`), maps it through the resolver, and emits its cells (and the powerline
   separator transition cells, whose colours depend on the adjacent sections' *current*
-  bg) in the mode-appropriate groups. So the `mode` component becomes a **custom** cell
-  here (carrying its mode group), rather than the Phase-1 built-in pass-through.
+  bg) in the mode-appropriate `lualine_*` groups. So the `mode` component becomes a
+  **custom** cell here (carrying its mode group), rather than the Phase-1 built-in
+  pass-through.
 - **The driver.** One `nx.autocmd.create("ModeChanged", { pattern = "*:*", callback })`
-  invalidates every theme-coloured section (`nx.statusline.invalidate` per `NxLine*`).
-  Because the groups are pre-defined and `render` just picks by the new mode, the
-  re-render is cheap; mode changes are infrequent (never per-keystroke), so this is well
-  within the no-frame-time-Lua budget. (A component with an explicit `color` override
-  opts out of the mode palette — its cell keeps its fixed group.)
-- **Tests** (`test/theme_spec.lua`): a theme table colours the sections; `auto` produces
-  non-nil groups from a loaded scheme; the code→theme-mode resolver maps each mode;
-  driving `i` / `v` / `:` recolours section A via `ModeChanged` (assert the cell's `hl`
-  group flips to `NxLineA_insert`/`_visual`/`_command` in the projected `status`), and
-  `<Esc>` restores `_normal`.
+  invalidates every theme-coloured section. Because the groups are pre-defined and
+  `render` just picks by the new mode, the re-render is cheap; mode changes are infrequent
+  (never per-keystroke), so this is well within the no-frame-time-Lua budget. (A component
+  with an explicit `color` override — itself a `{fg,bg,gui}` table, a function, or a
+  **highlight-group name**, the lualine `color` surface — opts out of the mode palette.)
+- **Tests** (`test/theme_spec.lua`): a theme table colours the sections; a name resolves
+  through `lualine.themes.*` (a stub theme module on the rtp); `auto` produces non-nil
+  groups from a loaded scheme; the code→theme-mode resolver maps each mode; the generated
+  groups are named `lualine_a_normal` etc.; driving `i` / `v` / `:` recolours section A
+  via `ModeChanged` (assert the cell's `hl` flips to `lualine_a_insert` / `_visual` /
+  `_command` in the projected `status`), and `<Esc>` restores `lualine_a_normal`.
 
 ## Phase 5 — Inactive windows, conditions, clicks, refresh, globalstatus
 
@@ -272,7 +287,7 @@ local line = require("nxvim-line")
 
 line.setup({
   options = {
-    theme = "auto",                          -- name | table | "auto"
+    theme = "auto",                          -- name | table | "auto" (name → bundled or lualine.themes.<name>)
     globalstatus = false,                    -- laststatus = 3 when true
     section_separators = { left = "", right = "" },
     component_separators = { left = "", right = "" },

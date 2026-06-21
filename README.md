@@ -118,10 +118,23 @@ Every component table accepts `icon`, `color`, `separator`, `cond`, `fmt`, and
 
 ## Themes
 
-`options.theme` takes a theme name, a theme table (lualine's `{ normal = { a, b, c },
-insert, visual, … }` shape), or `"auto"` — which derives a palette from your active
-colorscheme, so it tracks whatever you've loaded with no per-scheme wiring. Register your
-own with `require("nxvim-line").register_theme(name, table)`.
+`options.theme` takes a theme table (lualine's `{ normal = { a, b, c }, insert, visual,
+… }` shape), a theme **name**, or `"auto"`. A name resolves the way lualine resolves one
+— a bundled theme first, otherwise `require("lualine.themes.<name>")` — so a colorscheme
+that ships a lualine theme drops in unchanged:
+
+```lua
+require("nxvim-line").setup({ options = { theme = "catppuccin" } })  -- catppuccin's own lualine theme
+```
+
+`"auto"` instead derives a palette from your active colorscheme, tracking whatever you've
+loaded with no per-scheme wiring. Register your own with
+`require("nxvim-line").register_theme(name, table)`.
+
+Internally the theme is applied as the highlight groups lualine itself generates —
+`lualine_a_normal`, `lualine_a_insert`, `lualine_c_inactive`, … — so a colorscheme or a
+config that already styles those groups, and a component `color = "SomeHlGroup"`, all
+work as they do under lualine.
 
 ## Extending
 
