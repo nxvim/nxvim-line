@@ -103,9 +103,30 @@ Repo skeleton under `~/work/nxvim-plugins/nxvim-line`, matching the sibling plug
 `LICENSE`, `.gitignore`, `stylua.toml`, `lua/nxvim-line/init.lua` (module-map doc + a
 loud-stub `setup()` that errors until Phase 1), `examples/`, `test/`, `doc/`, this plan.
 
-## Phase 1 — Config model + the lowering core (the compiler)
+## Phase 1 — Config model + the lowering core (the compiler) ✅ (done)
 
 The spine everything else hangs on; thin component set so it's verifiable early.
+Landed as `config.lua` + `compile.lua` + `components.lua` + the public `init.lua`
+surface, with `config_spec.lua` (pure) and `compile_spec.lua` (end-to-end) — 14 tests.
+
+> **A core fix this surfaced** (committed in the editor repo, `700f24d3`): the plugin
+> test mirror's `t:statusline()` returned `""` for *any* statusline — its text extractor
+> (`chunk_runs_text`) only handled chunk-pair arrays, not the `{ text, style }` segment
+> *maps* `global_status` actually carries. Fixed so the rendered statusline is observable
+> in plugin tests (`compile_spec` asserts on `t:statusline()`). The mirror reflects the
+> **global** bar (`laststatus=3`), so those tests set `globalstatus = true`.
+
+Notes from the build (refinements over the original sketch below):
+- `nx.statusline` already owns the event→invalidate wiring (it registers an autocmd per
+  segment's declared `events` and replaces them on each `setup`), so `compile` just hands
+  each segment the **union** of its components' events — no separate autocmd bookkeeping,
+  and idempotency falls out for free.
+- A user `sections` entry **replaces that section's default wholesale** (lualine
+  semantics); unspecified sections keep their (Phase-1) defaults.
+- `mode` rides the new `ModeChanged` event; `location`/`progress` ride `CursorMoved(I)`;
+  `diagnostics` rides `LspDiagnostics`.
+
+Original step list (for reference):
 
 - **`config.lua`** — the lualine-shaped defaults and a validated deep-merge:
   `options` (`theme`, `section_separators`, `component_separators`,
