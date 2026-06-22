@@ -31,10 +31,12 @@ require("nxvim-line").setup({
 > per-component `color`/`padding`. And the **signature mode-reactive colour**: themes
 > (`theme = "auto"` derives from the colorscheme, a name, or a table; `register_theme`),
 > the `lualine_<section>_<mode>` groups, and the powerline section arrows — section A and
-> the edges recolour by mode via `ModeChanged`, no polling. Still to come: inactive
-> windows + `cond`/`fmt`/`on_click`/`refresh` (Phase 5). `fileformat` and `searchcount`
-> are **deferred** — they need editor primitives that don't exist yet, so naming them
-> errors loud with the reason.
+> the edges recolour by mode via `ModeChanged`, no polling. Runtime behaviour is in too:
+> dim **inactive-window** statuslines (`inactive_sections`), per-component `cond`/`fmt`/
+> `on_click`, and the periodic `refresh` timer. Still to come: git polish (Phase 6),
+> extensions + tabline (Phase 7), docs (Phase 8). `fileformat` and `searchcount` are **deferred** —
+> they need editor primitives that don't exist yet, so naming them errors loud with the
+> reason.
 
 ## How it works
 

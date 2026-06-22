@@ -327,23 +327,42 @@ Notes from the build:
   via `ModeChanged` (assert the cell's `hl` flips to `lualine_a_insert` / `_visual` /
   `_command` in the projected `status`), and `<Esc>` restores `lualine_a_normal`.
 
-## Phase 5 — Inactive windows, conditions, clicks, refresh, globalstatus
+## Phase 5 — Inactive windows, conditions, clicks, refresh, globalstatus ✅ (done)
 
-- **Inactive statusline** — `inactive_sections` rendered for non-focused windows using
-  `ctx.focused` (the per-window render the primitive already drives). Distinct (dim)
-  highlight groups.
-- **`cond` / `fmt`** — a component's `cond(ctx)` gates whether it renders;
-  `fmt(str, ctx)` post-processes its text (both lualine-faithful).
-- **`on_click`** — per-component `on_click = function(...)` registered as a `v:lua.<fn>`
-  and threaded onto the cell (the native click bridge).
-- **`refresh`** — `options.refresh = { statusline = ms }` drives a periodic
-  `invalidate` of time-varying sections (e.g. a clock component). Mode colour is *not*
-  on this timer — it is event-driven via `ModeChanged` (Phase 4) — so the refresh can
-  stay coarse (lualine's default 1 s) without making mode transitions feel laggy.
-- **`globalstatus`** — `true` → `laststatus = 3`; the layout renders once for the global
-  bar; component `ctx` uses the current window.
-- **Tests**: an inactive split shows `inactive_sections`; `cond=false` hides a component;
-  `fmt` transforms text; a click fires its handler; `globalstatus` flips `laststatus`.
+Landed in `compile.lua` (the per-component pipeline + the focus-aware render + the click
+registry + the refresh timer), with `test/runtime_spec.lua`. **44 tests pass.**
+
+- **Inactive statusline** ✅ — each section segment now captures BOTH its `sections` and
+  `inactive_sections` component lists; `render` picks by `ctx.focused` — a focused window
+  draws the active layout in its mode group with the powerline arrows, an unfocused window
+  draws `inactive_sections` flat (no arrows) in `lualine_<section>_inactive`. The half's
+  segment set is the UNION of active+inactive present sections (a section only in
+  `inactive_sections` renders empty when focused); the arrow adjacency is over the active
+  layout. The theme's `inactive` palette (Phase 4) supplies the dim groups.
+- **`cond` / `fmt`** ✅ — the component pipeline is `cond(ctx)` gate → `provide` →
+  `fmt(str, ctx)` (operates on the joined text, collapsing to one cell; nil/`""` hides) →
+  `icon` → `color` → `on_click`. A callback error becomes a loud `E:<name>` cell.
+- **`on_click`** ✅ — a per-component `on_click = function(clicks, button, mods)` is
+  assigned a build-time id (`compile._clicks`); the cell carries
+  `v:lua.require'nxvim-line.compile'._click(id)`, and `_click` adapts neovim's
+  `(minwid, clicks, button, mods)` to lualine's signature. (A fix this surfaced: cell
+  padding must mutate `text` in place, not rebuild the cell, or it drops `on_click`.)
+- **`refresh`** ✅ — `options.refresh = { statusline = ms }` arms a re-arming one-shot
+  `nx.timer` (default 1000ms) that invalidates every active segment each interval; a
+  generation token makes a rebuild supersede the prior loop, and `ms ≤ 0` disables it.
+  Mode colour is event-driven (`ModeChanged`), so the timer stays coarse with no lag.
+- **`globalstatus`** ✅ (since Phase 1) — `true` → `laststatus = 3`; inactive layouts
+  therefore only show under `laststatus = 2` (per-window bars), as in lualine.
+- **Tests** (`test/runtime_spec.lua`) ✅ — `globalstatus` flips `laststatus`; `cond=false`
+  hides a component; `fmt` transforms the text; `on_click` fires through the native click
+  bridge; a split's unfocused window paints `inactive_sections` in `lualine_a_inactive`
+  while the focused one keeps `lualine_a_normal`; the refresh timer re-renders a counter
+  component repeatedly. Per-window highlights are read off the `compile._last_win` seam.
+
+**Honest scope:** the lualine **inline function component** (`{ function() … end }` in a
+section) stays deferred — it errors loud (config.lua) rather than rendering. `cond`/`fmt`/
+`on_click` are the function-VALUED component options, which are supported; an inline
+function as the component *itself* is the separate feature still to come.
 
 ## Phase 6 — Git polish (`git.lua`)
 
