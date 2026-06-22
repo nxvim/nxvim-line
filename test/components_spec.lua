@@ -116,7 +116,11 @@ nx.test.describe("nxvim-line.git", function()
       options = { globalstatus = true },
       sections = { lualine_b = { "branch", "diff" } },
     })
-    t:cmd("edit " .. dir .. "/a.txt")
+    -- Drive :edit through the real input path so the lifecycle fires: loading the file
+    -- advances the changedtick -> TextChanged -> the branch/diff segment re-renders ->
+    -- git.ensure does the cache-miss fetch. (t:cmd bypasses that lifecycle path. a.txt
+    -- has no filetype, so FileType does NOT fire here — TextChanged is the trigger.)
+    t:feed(":edit " .. dir .. "/a.txt<CR>")
     local sl = t:wait_for(function()
       local s = t:statusline()
       return s:find("testbranch") and s:find("%+1") and s

@@ -211,15 +211,19 @@ M.register("lsp", {
 
 -- ----- branch / diff (git, async via nxvim-line.git) -------------------------
 
--- No declared `events`: the git module's own autocmds refresh the cache and invalidate
--- these segments; a buffer swap re-renders them (the layout-change rerender) so they
--- pick up the new buffer's cached value instantly. compile activates/deactivates the
--- git module based on whether either is in the layout.
+-- These depend on the window's buffer, so they re-render on the events that signal a
+-- buffer change: `BufEnter` (a switch) and `TextChanged` (a fresh `:edit` reuses the
+-- empty initial buffer — same id, so no `BufEnter` — but loading the file advances the
+-- changedtick, firing `TextChanged`). On each render `git.ensure` does a one-shot
+-- cache-miss fetch, then `git`'s own update invalidates the segment to paint the result.
+-- compile activates/deactivates the git module based on whether either is in the layout.
 
 M.register("branch", {
-  events = {},
+  events = { "BufEnter", "TextChanged" },
   provide = function(ctx)
-    local b = git.branch_of(ctx.buf)
+    git.ensure(ctx.buf)
+    local c = git.get(ctx.buf)
+    local b = c and c.branch
     if not b or b == "" then
       return nil
     end
@@ -228,9 +232,11 @@ M.register("branch", {
 })
 
 M.register("diff", {
-  events = {},
+  events = { "BufEnter", "TextChanged" },
   provide = function(ctx)
-    local d = git.diff_of(ctx.buf)
+    git.ensure(ctx.buf)
+    local c = git.get(ctx.buf)
+    local d = c and c.diff
     if not d then
       return nil
     end

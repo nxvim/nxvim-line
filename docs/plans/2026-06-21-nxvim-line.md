@@ -176,11 +176,19 @@ support added this phase — diagnostics/diff emit one coloured cell per part). 
 
 **Reordered from the original sketch (honest scope):**
 - **`git.lua` pulled forward from Phase 6** so `branch`/`diff` are *real*, not silent
-  stubs reading an empty cache. It runs `git` via `nx.run` off the tick, caches per
-  directory, and invalidates only the hosting segments on fresh data; `provide` stays
-  pure (reads the cache). A refresh is deferred to the next tick (`nx.on_next_tick`) so a
-  freshly-`:edit`ed buffer's name is settled before the directory is resolved. **Phase 6
-  is now "git polish"** (debounce, staleness, a watch) rather than the initial build.
+  stubs reading an empty cache. It runs `git` via `nx.run` off the tick, caches per file,
+  and invalidates only the hosting segments on fresh data. The refresh is driven from the
+  **render path**, not from a file-load event: the `branch`/`diff` `provide` calls
+  `git.ensure(buf)` (a one-shot, cache-miss-guarded fetch) on each render, and the
+  components list `BufEnter` + `TextChanged` so they *do* re-render when the buffer
+  changes. (Why not key off a load event? A fresh `:edit` **reuses** the empty initial
+  buffer — same id, so no `BufEnter` — and a no-filetype file fires no `FileType`; nxvim
+  also gates `BufReadPost` once-per-buffer via its `announced` set, so loading a file into
+  the reused buffer fires none of them. But the file-load advances the changedtick, which
+  *does* fire `TextChanged` — so that's the reliable "buffer changed" signal. The buffer
+  *name is* settled by then; the earlier worry that it wasn't was wrong.) A write /
+  cwd-change force a re-fetch for staleness. **Phase 6 is now "git polish"** (debounce, a
+  staleness TTL, a watch) rather than the initial build.
 - **`fileformat` and `searchcount` DEFERRED** — each needs an editor primitive that
   doesn't exist: a core `'fileformat'` option (unix/dos/mac isn't modelled), and a
   search-count state surface (last pattern + match count). They are **not registered**;
