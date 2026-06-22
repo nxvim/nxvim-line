@@ -245,11 +245,42 @@ with `test/style_spec.lua`. **31 tests pass.**
   `separator` overrides the *section-edge* powerline separator, so it belongs with the
   section separators it parameterizes.
 
-## Phase 4 — Themes + mode-reactive colour
+## Phase 4 — Themes + mode-reactive colour ✅ (done)
 
 The signature lualine experience: the bar recolours by mode (most visibly section A and
-the powerline edges). The `ModeChanged` core seam (now available — see *What the editor
-provides*) makes this **event-driven and precise**, with no polling.
+the powerline edges). Landed as `themes.lua` + the theme-group / transition-group surface
+in `highlights.lua` + the mode-reactive render & `ModeChanged` wiring in `compile.lua`,
+with `test/theme_spec.lua`. **38 tests pass.** The **section powerline arrows moved here
+from Phase 3** (their two colours ARE the adjacent sections' theme backgrounds) and ship
+in this phase too.
+
+Notes from the build:
+- **`themes.lua`** ✅ — `resolve(theme)`: a table is used as-is; `"auto"` derives from the
+  colorscheme via `nx.hl.get` (section-A accent per mode from `Function`/`String`/… , b/c
+  from `StatusLine`/`Normal`, every read with a fallback so it never yields a nil cell); a
+  name resolves **bundled (`default`) → `require("lualine.themes.<name>")` → hard error**.
+  `normalize` fills **x/y/z from c/b/a** and **any unspecified mode from `normal`**, and a
+  cell may be a `{fg,bg,gui}` table **or a string group to link to**. `mode_of(code)` maps
+  `n→normal`, `i→insert`, `v`/`V`/`<C-v>→visual`, `R→replace`, `c→command`, `t→terminal`,
+  else `normal`. `register(name, table)` (public `register_theme`).
+- **`highlights.define_theme(palette)`** ✅ — predefines `lualine_<section>_<mode>` for
+  every (section, mode) up front (lualine's own names, so a colorscheme/user override of
+  those groups applies); `section_group`/`transition_group` pick by the current mode at
+  render. The transition group paints the powerline arrow `fg = from-section bg`, `bg =
+  to-section bg` (lazily defined + cached). Nothing on the hot path but a name lookup.
+- **Mode-reactive render** ✅ — each section reads `nx.mode()`, maps it through `mode_of`,
+  and paints its nil-highlight cells in `lualine_<section>_<mode>`; a component with its
+  own `color`/per-severity `hl` keeps it (opts out). The powerline arrow is appended (left
+  half, into the next present section / fill) or prepended (right half, from the previous /
+  fill), so the chevrons point outward from the centre. A section that renders empty this
+  frame emits nothing (no stray arrows).
+- **The driver** ✅ — `ModeChanged` is folded into every section's event union (reusing
+  `nx.statusline`'s idempotent per-segment autocmd wiring), so all sections recolour on a
+  mode transition; the groups are pre-defined, so the re-render is just a group pick.
+- **Observability** — the status mirror carries text only, so a `compile._last` seam
+  records the cells each segment last emitted; the mode-flip test reads cell `hl` there.
+
+(For reference, the original step list:)
 
 **Compatibility is the point here** — adopt lualine's theme-table shape, its theme
 *resolution*, and its generated highlight-group *names*, so an existing lualine theme

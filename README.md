@@ -21,17 +21,20 @@ require("nxvim-line").setup({
 })
 ```
 
-> **Status: Phases 1–3 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
+> **Status: Phases 1–4 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
 > works: the config model + the lualine→`nx.statusline` compiler, and the component
 > library — `mode`, `branch`, `diff`, `diagnostics`, `filename` (path modes + `[+]`/`[-]`
 > flags), `filetype`, `encoding`, `lsp`, `progress`, `location`. `diff`/`diagnostics`
 > already colour with the editor's `Diff*`/`Diagnostic*` groups; `branch`/`diff` are
 > driven by an async `git` source. The lualine **look** is in: Nerd-Font icons
-> (`icons_enabled`, `register_icons`, an `icon_provider` hook), component separators
-> (`component_separators`), and per-component `color`/`padding`. Still to come: themes +
-> per-mode colour and the section powerline arrows (Phase 4). `fileformat` and
-> `searchcount` are **deferred** — they need editor primitives that don't exist yet, so
-> naming them errors loud with the reason.
+> (`icons_enabled`, `register_icons`, an `icon_provider` hook), component separators, and
+> per-component `color`/`padding`. And the **signature mode-reactive colour**: themes
+> (`theme = "auto"` derives from the colorscheme, a name, or a table; `register_theme`),
+> the `lualine_<section>_<mode>` groups, and the powerline section arrows — section A and
+> the edges recolour by mode via `ModeChanged`, no polling. Still to come: inactive
+> windows + `cond`/`fmt`/`on_click`/`refresh` (Phase 5). `fileformat` and `searchcount`
+> are **deferred** — they need editor primitives that don't exist yet, so naming them
+> errors loud with the reason.
 
 ## How it works
 

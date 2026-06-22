@@ -7,20 +7,24 @@
 -- each fresh setup() so the group names never grow unbounded across rebuilds (the
 -- idempotent-setup contract).
 --
--- Scope note: SECTION-level powerline separators — whose two colours ARE the adjacent
--- sections' background colours — depend on the theme's `lualine_<section>_<mode>` groups,
--- which land in Phase 4; they ship there. Phase 3 owns COMPONENT separators (drawn in the
--- section's own highlight), padding, icons, and this per-component `color`.
+-- Phase 4 adds the THEME groups: a `lualine_<section>_<mode>` group per (section, mode)
+-- from the resolved palette (lualine's own naming, so a colorscheme/user override of those
+-- groups just applies), and the SECTION powerline-separator transition groups, whose two
+-- colours ARE the adjacent sections' palette backgrounds.
 
 local M = {}
 
 local cache = {} -- canonical color key -> generated group name
 local counter = 0
+local theme_palette = nil -- the normalized palette of the current build (for transitions)
+local sep_cache = {} -- defined transition-group names (idempotency)
 
--- reset(): drop the interned-colour cache (called at the start of each build()).
+-- reset(): drop the interned-colour cache + theme state (start of each build()).
 function M.reset()
   cache = {}
   counter = 0
+  theme_palette = nil
+  sep_cache = {}
 end
 
 -- lualine's `gui = "bold,italic"` string → the nx.hl boolean attrs.
@@ -70,6 +74,64 @@ function M.color_group(color)
   end
   nx.hl.define(0, name, spec)
   cache[k] = name
+  return name
+end
+
+-- ----- theme groups (Phase 4) ------------------------------------------------
+
+local SECTIONS = { "a", "b", "c", "x", "y", "z" }
+local MODES = { "normal", "insert", "visual", "replace", "command", "terminal", "inactive" }
+
+-- Define one `lualine_<section>_<mode>` group from its palette cell: a string cell LINKS
+-- to that group, a `{ fg, bg, gui }` cell is concrete (with the gui attrs expanded).
+local function define_cell(name, cell)
+  if type(cell) == "string" then
+    nx.hl.define(0, name, { link = cell })
+  elseif type(cell) == "table" then
+    local spec = { fg = cell.fg, bg = cell.bg, sp = cell.sp }
+    if cell.gui ~= nil then
+      apply_gui(spec, cell.gui)
+    end
+    nx.hl.define(0, name, spec)
+  end
+end
+
+-- define_theme(palette): predefine every `lualine_<section>_<mode>` group up front from a
+-- NORMALIZED palette (themes.normalize), and stash the palette so transition_group can read
+-- adjacent section backgrounds. Nothing is created on the hot path after this.
+function M.define_theme(palette)
+  theme_palette = palette
+  for _, mode in ipairs(MODES) do
+    local secs = palette[mode]
+    if secs then
+      for _, sec in ipairs(SECTIONS) do
+        define_cell("lualine_" .. sec .. "_" .. mode, secs[sec])
+      end
+    end
+  end
+end
+
+-- section_group(sec, mode) -> the lualine group name a section's cells paint in.
+function M.section_group(sec, mode)
+  return "lualine_" .. sec .. "_" .. mode
+end
+
+-- transition_group(from, to, mode) -> a group for a powerline separator cell: its glyph is
+-- drawn `fg = from-section bg`, `bg = to-section bg`, so the arrow reads as a solid colour
+-- transition. Defined lazily + cached. A string-link palette cell has no readable bg, so
+-- the side falls back to nil (a degraded, uncoloured transition) rather than erroring.
+function M.transition_group(from, to, mode)
+  local name = "NxLineSep_" .. from .. "_" .. to .. "_" .. mode
+  if sep_cache[name] then
+    return name
+  end
+  local p = theme_palette and theme_palette[mode]
+  local from_cell, to_cell = p and p[from], p and p[to]
+  nx.hl.define(0, name, {
+    fg = type(from_cell) == "table" and from_cell.bg or nil,
+    bg = type(to_cell) == "table" and to_cell.bg or nil,
+  })
+  sep_cache[name] = true
   return name
 end
 

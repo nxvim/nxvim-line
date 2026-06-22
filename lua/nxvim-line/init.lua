@@ -29,6 +29,7 @@ local config = require("nxvim-line.config")
 local compile = require("nxvim-line.compile")
 local components = require("nxvim-line.components")
 local icons = require("nxvim-line.icons")
+local themes = require("nxvim-line.themes")
 
 local M = {}
 
@@ -70,12 +71,13 @@ function M.register_icons(map)
   return M
 end
 
--- Themes land in Phase 4; expose a loud placeholder so a call fails clearly rather
--- than silently no-op (CLAUDE.md: no silent stubs).
-function M.register_theme()
-  error(
-    "nxvim-line: themes (register_theme) land in Phase 4 — see docs/plans/2026-06-21-nxvim-line.md"
-  )
+-- register_theme(name, palette): add a bundled theme (a lualine-shaped per-mode palette
+-- table). Call BEFORE setup() so `options.theme = name` resolves it. The palette follows
+-- lualine's shape — `{ normal = { a, b, c }, insert = {...}, … }` — with x/y/z and missing
+-- modes filled in at resolution (see themes.lua).
+function M.register_theme(name, palette)
+  themes.register(name, palette)
+  return M
 end
 
 return M
