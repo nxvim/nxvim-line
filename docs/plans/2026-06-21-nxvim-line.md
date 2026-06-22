@@ -391,17 +391,36 @@ repo. **46 tests pass.**
 left as future options — the `-U0` hunk parse is sufficient for working-tree-vs-HEAD, the
 one comparison the `diff` component exposes today.
 
-## Phase 7 — Extensions, tabline
+## Phase 7 — Extensions, tabline ✅ (done)
 
-- **`extensions.lua`** — per-filetype layout overrides (lualine's `extensions`):
-  e.g. an `nxvim-tree` extension shows just the tree title, a `quickfix` extension a
-  quickfix label. A filetype in `disabled_filetypes` shows the plain/empty line.
-- **`tabline`** — if configured, lower the tabline sections onto the `'tabline'`
-  `%`-format engine (the segment layout never applies to the tabline per the core
-  design); a thin compile path emits a `%`-format string from the tabline components.
-  Winbar is **out of scope** (no `winbar` option in core — a separate core dependency).
-- **Tests**: a tree/quickfix buffer renders its extension layout; a disabled filetype
-  shows nothing; a tabline config produces the expected `%`-format.
+Landed as `extensions.lua` + the layout-pick / tabline lowering in `compile.lua` (and a
+`label` component), with `test/extensions_spec.lua`. **52 tests pass.**
+
+- **`extensions.lua`** ✅ — per-filetype layout overrides (lualine's `extensions`).
+  `resolve(list)` turns bundled names and/or inline `{ filetypes, sections,
+  inactive_sections }` tables into normalized entries `{ fts, sections, inactive_sections }`
+  (validating each component, erroring loud on an unknown name). Bundled: `nxvim-tree`
+  (`nvim-tree` alias) → a `\u{f07b} Files` title, `quickfix` → a `Quickfix` label + the
+  location. `register_extension(name, ext)` adds one. The new `label` component
+  (`{ "label", text = … }`) is the static-title building block.
+- **The pick** ✅ — each section's `render` calls `pick_layout(ctx)`: the rendered buffer's
+  filetype in `disabled_filetypes.statusline` → an empty section; a filetype matching an
+  extension → that extension's layout for the section (flat, no arrows; a section the
+  extension omits renders empty, since an extension replaces the whole layout); else the
+  focus-appropriate base layout. The registered segment set is the UNION of base +
+  inactive + every extension's sections.
+- **`tabline`** ✅ — `_tabline()` lowers the `tabline` section components to a `%`-format
+  string (each cell → a `%#group#text` run with `%`-escaped text; `%=` splits the halves),
+  wired live via `vim.o.tabline = "%!v:lua.require('nxvim-line.compile')._tabline()"` with
+  `showtabline = 2`. A segment layout never applies to the tabline (core design), so this
+  is the `%`-format path the core eval (`v:lua.` stripped, run inline) supports. An empty
+  tabline clears only what we set. **Winbar is out of scope** (no `winbar` option in core).
+- **Tests** (`test/extensions_spec.lua`) ✅ — a disabled filetype blanks the bar; a bundled
+  (quickfix) and a custom extension each replace the layout for their filetype; an unknown
+  extension errors loud; the tabline config wires the `%!` dispatcher + `showtabline` and
+  `_tabline()` emits the component text with a `%#group#` run and `%=`; reconfiguring
+  without a tabline clears it. (Tests reset `filetype` between cases — `fresh_slate` reuses
+  the `[No Name]` buffer, so a set filetype would otherwise leak.)
 
 ## Phase 8 — Docs, help, examples, polish
 

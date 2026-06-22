@@ -175,6 +175,7 @@ function M.merge(base, opts)
 
   M._normalize_sections(cfg.sections, "sections")
   M._normalize_sections(cfg.inactive_sections, "inactive_sections")
+  M._normalize_sections(cfg.tabline, "tabline")
 
   cfg.options.section_separators = M._normalize_separators(cfg.options.section_separators)
   cfg.options.component_separators = M._normalize_separators(cfg.options.component_separators)

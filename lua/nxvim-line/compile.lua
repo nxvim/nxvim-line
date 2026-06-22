@@ -22,6 +22,7 @@ local git = require("nxvim-line.git")
 local icons = require("nxvim-line.icons")
 local highlights = require("nxvim-line.highlights")
 local themes = require("nxvim-line.themes")
+local extensions = require("nxvim-line.extensions")
 
 local M = {}
 
@@ -184,17 +185,34 @@ local function component_cells(comp, ctx)
   return run
 end
 
--- Render one section into a flat cell list, picking the layout by FOCUS: a focused window
--- renders `active_comps` in its mode group with the powerline arrows; an unfocused window
--- renders `inactive_comps` in the flat `lualine_<section>_inactive` group with no arrows
--- (lualine's dim inactive bar). Every cell with no highlight of its own takes the section
--- group — a component with its own `color`/per-severity hl keeps it (opts out). A section
--- that renders empty this frame emits nothing.
--- `opts = { section, side, active_comps, inactive_comps, component_sep, padding,
---           sep_glyph, sep_neighbor }`.
+-- Pick the component list (and whether arrows draw) for this section against the rendered
+-- buffer's filetype: a disabled filetype → nothing; a matching extension → its layout
+-- (flat, no arrows); otherwise the focus-appropriate base layout (active arrows, inactive
+-- flat). `opts.extensions[i] = { fts, comps, inactive_comps }` per resolved extension.
+local function pick_layout(ctx, opts, focused)
+  local ft = nx.bo[ctx.buf].filetype or ""
+  if opts.disabled[ft] then
+    return nil
+  end
+  for _, e in ipairs(opts.extensions) do
+    if e.fts[ft] then
+      return (focused and e.comps or (e.inactive_comps or e.comps)), false
+    end
+  end
+  local comps = focused and opts.active_comps or opts.inactive_comps
+  return comps, focused and opts.sep_glyph ~= ""
+end
+
+-- Render one section into a flat cell list, picking the layout (disabled / extension /
+-- base) and colouring by FOCUS: a focused window renders in its mode group with the
+-- powerline arrows; an unfocused window renders flat in `lualine_<section>_inactive`. Every
+-- cell with no highlight of its own takes the section group — a component with its own
+-- `color`/per-severity hl keeps it (opts out). A section that renders empty emits nothing.
+-- `opts = { section, side, active_comps, inactive_comps, extensions, disabled,
+--           component_sep, padding, sep_glyph, sep_neighbor }`.
 local function render_section(ctx, opts)
   local focused = ctx.focused
-  local comps = focused and opts.active_comps or opts.inactive_comps
+  local comps, want_arrows = pick_layout(ctx, opts, focused)
   if not comps or #comps == 0 then
     return {}
   end
@@ -220,8 +238,9 @@ local function render_section(ctx, opts)
     cells[#cells + 1] = cell
   end
 
-  -- The powerline arrows are drawn only for the focused window; inactive bars stay flat.
-  local arrows = focused and opts.sep_glyph ~= ""
+  -- The powerline arrows are drawn only for a focused BASE layout (pick_layout's verdict);
+  -- inactive and extension bars stay flat.
+  local arrows = want_arrows
 
   -- right half: the leading arrow transitions FROM this section's bg INTO the neighbour.
   if arrows and opts.side == "right" then
@@ -303,30 +322,55 @@ local function active_present(config, keys)
   return out
 end
 
--- The section keys (of one half) present in EITHER `sections` or `inactive_sections` — the
--- segments to register for that half. A section only in `inactive_sections` renders empty
--- when focused and its inactive layout otherwise.
-local function any_present(config, keys)
+-- Does any resolved extension define this section (active or inactive)?
+local function any_ext_has(exts, sec)
+  for _, e in ipairs(exts) do
+    if nonempty(e.sections[sec]) or nonempty(e.inactive_sections[sec]) then
+      return true
+    end
+  end
+  return false
+end
+
+-- The section keys (of one half) present in `sections`, `inactive_sections`, OR any
+-- extension — the segments to register for that half. A section only an extension defines
+-- renders empty in the base layout and its extension layout when that filetype is active.
+local function any_present(config, keys, exts)
   local out = {}
   for _, sec in ipairs(keys) do
-    if nonempty(config.sections[sec]) or nonempty(config.inactive_sections[sec]) then
+    if
+      nonempty(config.sections[sec])
+      or nonempty(config.inactive_sections[sec])
+      or any_ext_has(exts, sec)
+    then
       out[#out + 1] = sec
     end
   end
   return out
 end
 
--- Register one section's segment, capturing both its active and inactive component lists.
--- `neighbor` is the letter the focused-window powerline arrow transitions into.
-local function build_section(config, sec, side, sep_glyph, component_sep, neighbor, out, git_segs)
-  local active_comps = config.sections[sec] or {}
-  local inactive_comps = config.inactive_sections[sec] or {}
-  local both = {}
-  for _, c in ipairs(active_comps) do
-    both[#both + 1] = c
+-- Register one section's segment, capturing its active/inactive component lists and the
+-- per-extension overrides. `neighbor` is the letter the focused arrow transitions into.
+local function build_section(cfg, sec, side, sep_glyph, component_sep, neighbor, ctx, out, git_segs)
+  local active_comps = cfg.sections[sec] or {}
+  local inactive_comps = cfg.inactive_sections[sec] or {}
+  local both = {} -- the union the section's event/git wiring is computed over
+  local function add_all(list)
+    for _, c in ipairs(list or {}) do
+      both[#both + 1] = c
+    end
   end
-  for _, c in ipairs(inactive_comps) do
-    both[#both + 1] = c
+  add_all(active_comps)
+  add_all(inactive_comps)
+
+  -- Every extension's comps FOR THIS SECTION (nil when the extension omits it → an empty
+  -- render when that filetype is active, since the extension replaces the whole layout).
+  local section_exts = {}
+  for _, e in ipairs(ctx.exts) do
+    section_exts[#section_exts + 1] =
+      { fts = e.fts, comps = e.sections[sec], inactive_comps = e.inactive_sections[sec] }
+    add_all(e.sections[sec])
+    add_all(e.inactive_sections[sec])
   end
 
   local segname = SECTION_SEGMENT[sec]
@@ -335,6 +379,8 @@ local function build_section(config, sec, side, sep_glyph, component_sep, neighb
     side = side,
     active_comps = active_comps,
     inactive_comps = inactive_comps,
+    extensions = section_exts,
+    disabled = ctx.disabled,
     component_sep = component_sep,
     padding = DEFAULT_PADDING,
     sep_glyph = sep_glyph,
@@ -343,11 +389,11 @@ local function build_section(config, sec, side, sep_glyph, component_sep, neighb
   nx.statusline.segment({
     name = segname,
     events = union_events(both),
-    render = function(ctx)
-      local cells = render_section(ctx, opts)
+    render = function(rctx)
+      local cells = render_section(rctx, opts)
       M._last[segname] = cells
-      M._last_win[ctx.win] = M._last_win[ctx.win] or {}
-      M._last_win[ctx.win][segname] = cells
+      M._last_win[rctx.win] = M._last_win[rctx.win] or {}
+      M._last_win[rctx.win][segname] = cells
       return cells
     end,
   })
@@ -359,10 +405,10 @@ end
 
 -- Build one half's segments with powerline adjacency. Left sections arrow INTO the next
 -- ACTIVE-present section (or the fill); right sections arrow into the PREVIOUS one (or the
--- fill), so the chevrons point outward from the centre. Adjacency is over the active
--- layout (the only one that draws arrows).
-local function build_side(config, keys, side, sep_glyph, component_sep, out, git_segs)
-  local segs = any_present(config, keys)
+-- fill), so the chevrons point outward from the centre. Adjacency is over the active base
+-- layout (the only one that draws arrows). `ctx = { exts, disabled }`.
+local function build_side(config, keys, side, sep_glyph, component_sep, ctx, out, git_segs)
+  local segs = any_present(config, keys, ctx.exts)
   local active = active_present(config, keys)
   -- map a section key → its index among the ACTIVE present sections of this half
   local active_idx = {}
@@ -376,7 +422,7 @@ local function build_side(config, keys, side, sep_glyph, component_sep, out, git
       local adj = side == "left" and active[i + 1] or active[i - 1]
       neighbor = adj and SECTION_LETTER[adj] or FILL_SECTION
     end
-    build_section(config, sec, side, sep_glyph, component_sep, neighbor, out, git_segs)
+    build_section(config, sec, side, sep_glyph, component_sep, neighbor, ctx, out, git_segs)
   end
 end
 
@@ -399,10 +445,10 @@ function M._click(id)
   end
 end
 
--- Assign click ids across every component that declares an `on_click` function (in both
--- the active and inactive layouts), storing the handler for _click to resolve. Tags the
--- normalized component entry with `_click_id` (rebuilt each setup, so this is per-build).
-local function assign_clicks(config)
+-- Assign click ids across every component that declares an `on_click` function (in the
+-- active, inactive, tabline, and extension layouts), storing the handler for _click to
+-- resolve. Tags the normalized component entry with `_click_id` (per-build).
+local function assign_clicks(config, exts)
   M._clicks = {}
   local next_id = 0
   local function walk(sections)
@@ -420,6 +466,11 @@ local function assign_clicks(config)
   end
   walk(config.sections)
   walk(config.inactive_sections)
+  walk(config.tabline)
+  for _, e in ipairs(exts) do
+    walk(e.sections)
+    walk(e.inactive_sections)
+  end
 end
 
 -- ----- periodic refresh ------------------------------------------------------
@@ -447,6 +498,73 @@ local function start_refresh(refresh)
   nx.timer(tick, ms)
 end
 
+-- ----- tabline ---------------------------------------------------------------
+
+-- The normalized tabline section table of the current build (nil when no tabline), and
+-- whether WE set `'tabline'` (so a later empty config clears only our own).
+M._tabline_cfg = nil
+M._tabline_set = false
+
+-- _tabline(): the `%`-format string for the tabline, lowered from the tabline section
+-- components. Called by the core `'tabline'` engine via `%!v:lua...` each render, so it is
+-- live. Each cell becomes a `%#group#text` run (text `%`-escaped); `%=` splits the halves.
+function M._tabline()
+  local cfg = M._tabline_cfg
+  if not cfg then
+    return ""
+  end
+  local rctx = { win = nx.win.current(), buf = nx.buf.current(), focused = true }
+  local mode = themes.mode_of(nx.mode().mode)
+  local parts = {}
+  local function render_keys(keys)
+    for _, sec in ipairs(keys) do
+      local comps = cfg[sec]
+      if nonempty(comps) then
+        local section_hl = highlights.section_group(SECTION_LETTER[sec], mode)
+        for _, comp in ipairs(comps) do
+          local run = component_cells(comp, rctx)
+          if #run > 0 then
+            run[1].text = " " .. run[1].text
+            run[#run].text = run[#run].text .. " "
+            for _, c in ipairs(run) do
+              parts[#parts + 1] = "%#" .. (c.hl or section_hl) .. "#" .. c.text:gsub("%%", "%%%%")
+            end
+          end
+        end
+      end
+    end
+  end
+  render_keys(LEFT)
+  parts[#parts + 1] = "%="
+  render_keys(RIGHT)
+  return table.concat(parts)
+end
+
+-- Lower the tabline config onto the core `'tabline'` `%`-format engine (a segment layout
+-- never applies to the tabline, per the core design). A `%!v:lua...` dispatcher keeps it
+-- live; `showtabline = 2` shows the bar. An empty tabline clears only what we set.
+local function build_tabline(config)
+  local has_tab = false
+  for _, sec in ipairs(ALL_SECTIONS) do
+    if type(config.tabline[sec]) == "table" and #config.tabline[sec] > 0 then
+      has_tab = true
+      break
+    end
+  end
+  if has_tab then
+    M._tabline_cfg = config.tabline
+    vim.o.tabline = "%!v:lua.require('nxvim-line.compile')._tabline()"
+    vim.o.showtabline = 2
+    M._tabline_set = true
+  else
+    M._tabline_cfg = nil
+    if M._tabline_set then
+      vim.o.tabline = ""
+      M._tabline_set = false
+    end
+  end
+end
+
 -- build(config): (re)build the live statusline. Idempotent — see the module note.
 function M.build(config)
   -- Styling configuration consumed by render: icon glyphs on/off + the interned-colour
@@ -461,18 +579,31 @@ function M.build(config)
   -- highlight work on the hot path — render only picks a group by the current mode).
   highlights.define_theme(themes.resolve(config.options.theme))
 
+  -- Resolve extensions (per-filetype layout overrides) + the disabled-filetype set.
+  local exts = extensions.resolve(config.extensions)
+  local disabled = {}
+  local df = config.options.disabled_filetypes
+  if type(df) == "table" and type(df.statusline) == "table" then
+    for _, ft in ipairs(df.statusline) do
+      disabled[ft] = true
+    end
+  end
+  local bctx = { exts = exts, disabled = disabled }
+
+  assign_clicks(config, exts)
+
   -- Left sections use `component_separators.left` + `section_separators.left`, right
   -- sections the `.right` variants (lualine).
-  assign_clicks(config)
-
   local cs = config.options.component_separators
   local ss = config.options.section_separators
   M._last = {}
   M._last_win = {}
   local left, right = {}, {}
   local git_segs = {}
-  build_side(config, LEFT, "left", ss.left, cs.left, left, git_segs)
-  build_side(config, RIGHT, "right", ss.right, cs.right, right, git_segs)
+  build_side(config, LEFT, "left", ss.left, cs.left, bctx, left, git_segs)
+  build_side(config, RIGHT, "right", ss.right, cs.right, bctx, right, git_segs)
+
+  build_tabline(config)
 
   vim.o.laststatus = config.options.globalstatus and 3 or 2
   nx.statusline.setup({ left = left, right = right })

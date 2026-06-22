@@ -30,6 +30,7 @@ local compile = require("nxvim-line.compile")
 local components = require("nxvim-line.components")
 local icons = require("nxvim-line.icons")
 local themes = require("nxvim-line.themes")
+local extensions = require("nxvim-line.extensions")
 
 local M = {}
 
@@ -77,6 +78,14 @@ end
 -- modes filled in at resolution (see themes.lua).
 function M.register_theme(name, palette)
   themes.register(name, palette)
+  return M
+end
+
+-- register_extension(name, ext): add a bundled extension — a per-filetype layout override
+-- `{ filetypes = { "ft", … }, sections = {...}, inactive_sections = {...}? }`. Call BEFORE
+-- setup() so `extensions = { name }` resolves it.
+function M.register_extension(name, ext)
+  extensions.register(name, ext)
   return M
 end
 

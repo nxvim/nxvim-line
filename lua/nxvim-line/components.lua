@@ -55,6 +55,21 @@ function M.get(name)
   return M._registry[name]
 end
 
+-- ----- label -----------------------------------------------------------------
+
+-- A static-text component: `{ "label", text = "Quickfix" }`. The building block for the
+-- extension layouts (a tree / quickfix title), and useful in any section.
+M.register("label", {
+  events = {},
+  provide = function(_ctx, opts)
+    local text = opts and opts.text
+    if type(text) ~= "string" or text == "" then
+      return nil
+    end
+    return { text = text }
+  end,
+})
+
 -- ----- mode ------------------------------------------------------------------
 
 -- Short mode code (`nx.mode().mode`) -> a lualine-style label.

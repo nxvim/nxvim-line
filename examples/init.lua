@@ -33,6 +33,8 @@ nx.plugins({
           lualine_c = { { "filename", path = 1 } },
           lualine_x = { "location" },
         },
+        -- per-filetype layout overrides (the tree shows a title, qf a label)
+        extensions = { "nxvim-tree", "quickfix" },
       })
     end,
   },

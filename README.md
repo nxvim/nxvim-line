@@ -34,8 +34,10 @@ require("nxvim-line").setup({
 > the edges recolour by mode via `ModeChanged`, no polling. Runtime behaviour is in too:
 > dim **inactive-window** statuslines (`inactive_sections`), per-component `cond`/`fmt`/
 > `on_click`, and the periodic `refresh` timer. The async git source is debounced + bounded
-> with a `.git` watch (external commits/checkouts refresh the bar). Still to come:
-> extensions + tabline (Phase 7), docs (Phase 8). `fileformat` and `searchcount` are **deferred** —
+> with a `.git` watch (external commits/checkouts refresh the bar). Per-filetype
+> `extensions` (bundled `nxvim-tree`/`quickfix` + custom), `disabled_filetypes`, and a
+> `tabline` lowered onto the `%`-format engine round out the surface. Still to come: docs
+> polish (Phase 8). `fileformat` and `searchcount` are **deferred** —
 > they need editor primitives that don't exist yet, so naming them errors loud with the
 > reason.
 
