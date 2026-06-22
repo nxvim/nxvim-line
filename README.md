@@ -112,8 +112,9 @@ sections = {
 ```
 
 Every component table accepts `icon`, `color`, `padding`, `cond`, `fmt`, and
-`on_click`, plus component-specific keys. (An inline `function` _as_ a component is not
-supported — use `register_component` instead; the function-valued options above are.)
+`on_click`, plus component-specific keys. An inline `function` _as_ a component is also
+supported (lualine's spelling) — `{ function() return "…" end, color = … }` — returning
+the component's text.
 
 ## Components
 
@@ -130,8 +131,8 @@ supported — use `register_component` instead; the function-valued options abov
 | `location`    | `line:col`                                                  |
 | `lsp`         | attached LSP client names                                   |
 | `label`       | static text (`{ "label", text = "…" }`)                     |
+| `searchcount` | `[idx/total]` of the last search (bounded `maxcount`)        |
 | `fileformat`  | unix / dos / mac — **deferred** (needs a core option)        |
-| `searchcount` | `[n/N]` — **deferred** (needs core search-count state)       |
 
 ## Themes
 

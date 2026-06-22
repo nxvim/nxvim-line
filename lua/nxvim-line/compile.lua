@@ -126,12 +126,27 @@ local function component_cells(comp, ctx)
     end
   end
 
-  local spec = components.get(comp.name)
-  local ok, result = pcall(spec.provide, ctx, comp)
-  if not ok then
-    return error_cell(comp.name)
+  -- An inline-function component (`{ function() … end }`): the function returns the text
+  -- (a string) or cell(s); everything else (fmt/icon/color/on_click) applies on top.
+  local run
+  if comp._inline then
+    local ok, result = pcall(comp._inline, ctx, comp)
+    if not ok then
+      return error_cell(comp.name)
+    end
+    if type(result) == "string" then
+      run = result ~= "" and { { text = result } } or {}
+    else
+      run = normalize_cells(result)
+    end
+  else
+    local spec = components.get(comp.name)
+    local ok, result = pcall(spec.provide, ctx, comp)
+    if not ok then
+      return error_cell(comp.name)
+    end
+    run = normalize_cells(result)
   end
-  local run = normalize_cells(result)
   if #run == 0 then
     return {}
   end
@@ -287,8 +302,12 @@ local function union_events(comps)
     end
   end
   for _, comp in ipairs(comps) do
-    for _, ev in ipairs(components.get(comp.name).events) do
-      add(ev)
+    -- inline-function components carry no declared events (they ride `refresh` / a
+    -- sibling component's event); only registered components contribute their events.
+    if not comp._inline then
+      for _, ev in ipairs(components.get(comp.name).events) do
+        add(ev)
+      end
     end
   end
   add("ModeChanged")

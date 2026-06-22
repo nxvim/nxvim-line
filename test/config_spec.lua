@@ -61,12 +61,17 @@ nx.test.describe("nxvim-line.config", function()
       .to_error("unknown component")
   end)
 
-  nx.test.it("rejects a function component for now (Phase 5)", function()
-    nx.test
-      .expect(function()
-        config.merge(config.defaults(), { sections = { lualine_a = { function() end } } })
-      end)
-      .to_error("Phase 5")
+  nx.test.it("normalizes an inline function component onto _inline", function()
+    local fn = function()
+      return "x"
+    end
+    local cfg = config.merge(config.defaults(), {
+      sections = { lualine_a = { fn, { fn, color = "WarningMsg" } } },
+    })
+    -- a bare function and a `{ fn, opts }` table both keep the function on `_inline`
+    nx.test.expect(cfg.sections.lualine_a[1]._inline).to_be(fn)
+    nx.test.expect(cfg.sections.lualine_a[2]._inline).to_be(fn)
+    nx.test.expect(cfg.sections.lualine_a[2].color).to_be("WarningMsg")
   end)
 
   nx.test.it("accepts a registered custom component", function()

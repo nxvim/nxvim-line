@@ -62,42 +62,50 @@ function M.defaults()
   return deepcopy(DEFAULTS)
 end
 
--- Normalize one component entry to `{ name = "...", <per-component opts> }`. A bare
--- string becomes `{ name = s }`; a table must carry a string name at `[1]` (its other
--- keys are kept as the component's options). A function entry is the lualine "inline
--- component" spelling — not supported until Phase 5, so it errors loud rather than
--- being silently dropped (CLAUDE.md: no silent stubs).
+-- Normalize one component entry to `{ name = "...", <per-component opts> }`. A bare string
+-- becomes `{ name = s }`; a table carries a string name (a registered component) OR a
+-- FUNCTION at `[1]` — the lualine "inline component" spelling, kept on `_inline` and given
+-- a synthetic name so the rest of the pipeline (icon / color / cond / fmt / on_click /
+-- padding) applies. A bare function is the shorthand for `{ function }`.
 function M._normalize_entry(entry, where)
   local norm
   if type(entry) == "string" then
     norm = { name = entry }
   elseif type(entry) == "function" then
-    error("nxvim-line: function components land in Phase 5 (" .. where .. ")")
+    norm = { name = "<inline>", _inline = entry }
   elseif type(entry) == "table" then
     if type(entry[1]) == "function" then
-      error("nxvim-line: function components land in Phase 5 (" .. where .. ")")
+      norm = deepcopy(entry)
+      norm._inline = entry[1]
+      norm.name = "<inline>"
+      norm[1] = nil
+    elseif type(entry[1]) == "string" then
+      norm = deepcopy(entry)
+      norm.name = entry[1]
+      norm[1] = nil
+    else
+      error(
+        "nxvim-line: a component table needs a string name or a function at [1] (" .. where .. ")"
+      )
     end
-    if type(entry[1]) ~= "string" then
-      error("nxvim-line: a component table needs a string name at [1] (" .. where .. ")")
-    end
-    norm = deepcopy(entry)
-    norm.name = entry[1]
-    norm[1] = nil
   else
     error(
-      "nxvim-line: a component must be a string or table, got "
+      "nxvim-line: a component must be a string, table, or function, got "
         .. type(entry)
         .. " ("
         .. where
         .. ")"
     )
   end
-  local deferred = components.deferred_reason(norm.name)
-  if deferred then
-    error("nxvim-line: component '" .. norm.name .. "' is not available yet — " .. deferred)
-  end
-  if not components.is_known(norm.name) then
-    error("nxvim-line: unknown component '" .. norm.name .. "' (" .. where .. ")")
+  -- An inline-function component is self-contained — no registry lookup / deferred check.
+  if norm._inline == nil then
+    local deferred = components.deferred_reason(norm.name)
+    if deferred then
+      error("nxvim-line: component '" .. norm.name .. "' is not available yet — " .. deferred)
+    end
+    if not components.is_known(norm.name) then
+      error("nxvim-line: unknown component '" .. norm.name .. "' (" .. where .. ")")
+    end
   end
   return norm
 end

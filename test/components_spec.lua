@@ -75,11 +75,6 @@ nx.test.describe("nxvim-line.components", function()
         line.setup({ sections = { lualine_x = { "fileformat" } } })
       end)
       .to_error("not available yet")
-    nx.test
-      .expect(function()
-        line.setup({ sections = { lualine_z = { "searchcount" } } })
-      end)
-      .to_error("not available yet")
   end)
 end)
 

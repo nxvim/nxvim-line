@@ -132,14 +132,23 @@ re-renders only on its own events (never per frame).
 	progress	Top / Bot / NN% through the buffer.
 	location	line:col.
 	lsp		Attached LSP client names.
+	searchcount	`[idx/total]` of the last search pattern (the `/`
+			register), like vim's searchcount(). Bounded by
+			`opts.maxcount` (default 99; beyond it the total shows
+			`99+`); nothing when there is no pattern / no match.
 	label		Static text: `{ "label", text = "…" }`. The building
 			block for extension titles (|nxvim-line-extensions|).
 
+							*nxvim-line-inline*
+An inline FUNCTION is also a component (lualine's spelling):
+`{ function() return "…" end, color = … }`. It returns the component's text;
+the per-component options (|nxvim-line-component-options|) apply on top. It
+carries no events, so it updates on `refresh` or a sibling component's event.
+
 							*nxvim-line-deferred*
-`fileformat` and `searchcount` are DEFERRED — each needs an editor primitive
-that does not exist yet (a `'fileformat'` option; a search-count state). They
-are registered as deferred, so naming one in `sections` errors loud with the
-reason rather than rendering nothing.
+`fileformat` is DEFERRED — it needs an editor primitive that does not exist
+yet (a `'fileformat'` option). It is registered as deferred, so naming it in
+`sections` errors loud with the reason rather than rendering nothing.
 
 ==============================================================================
 COMPONENT OPTIONS				*nxvim-line-component-options*
@@ -291,10 +300,7 @@ independently (as `diff` / `diagnostics` do).
 ==============================================================================
 NOT SUPPORTED						*nxvim-line-unsupported*
 
-- `fileformat` / `searchcount` components — deferred (|nxvim-line-deferred|).
-- An inline FUNCTION as a component (`{ function() … end }`) — use
-  |nxvim-line.register_component| instead; the function options `cond` / `fmt`
-  / `on_click` ARE supported.
+- `fileformat` component — deferred (|nxvim-line-deferred|).
 - Winbar — needs a `'winbar'` option in nxvim-core.
 
  vim:tw=78:ft=help:

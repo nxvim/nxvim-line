@@ -26,7 +26,6 @@ M._registry = {}
 -- rather than silently rendering nothing (CLAUDE.md: no silent stubs).
 M._deferred = {
   fileformat = "needs a core 'fileformat' option (unix/dos/mac is not modelled yet)",
-  searchcount = "needs core search-count state (last pattern + match count)",
 }
 
 function M.deferred_reason(name)
@@ -232,6 +231,53 @@ M.register("lsp", {
       return nil
     end
     return { text = table.concat(names, ",") }
+  end,
+})
+
+-- ----- searchcount -----------------------------------------------------------
+
+-- The match index / total for the last search pattern (vim's `searchcount()`), e.g.
+-- `[3/12]`. Pure-Lua: the pattern is the read-only `/` register; matches are enumerated
+-- with positions via the native `nx.buf.search` (vim engine), so the cursor's index is
+-- exact. Bounded by `opts.maxcount` (default 99 — vim's default) so a buffer with very many
+-- matches never makes a render unbounded; beyond it the total shows as `99+`. Nothing is
+-- shown when there is no pattern or no match in the buffer. Rides `CursorMoved` (a search,
+-- `n`, `N` all move the cursor onto a match).
+M.register("searchcount", {
+  events = { "CursorMoved", "CursorMovedI" },
+  provide = function(ctx, opts)
+    local pattern = vim.fn.getreg("/")
+    if not pattern or pattern == "" then
+      return nil
+    end
+    local maxcount = (opts and opts.maxcount) or 99
+    local cur = nx.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
+    local crow, ccol = cur[1], cur[2] or 0
+
+    local total, current = 0, 0
+    local from = { line = 1, col = 0 }
+    while total < maxcount do
+      local m = nx.buf.search(ctx.buf, pattern, { engine = "vim", from = from })
+      if not m then
+        break
+      end
+      total = total + 1
+      -- the current match: the last one whose start is at or before the cursor
+      if m.line < crow or (m.line == crow and m.col <= ccol) then
+        current = total
+      end
+      -- advance past this match; bump by one on a zero-width match so we can't spin
+      local ecol = m.end_col
+      if ecol <= m.col then
+        ecol = m.col + 1
+      end
+      from = { line = m.line, col = ecol }
+    end
+    if total == 0 then
+      return nil
+    end
+    local shown = (total >= maxcount) and (maxcount .. "+") or tostring(total)
+    return { text = string.format("[%d/%s]", current, shown) }
   end,
 })
 
