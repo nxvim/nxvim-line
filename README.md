@@ -21,8 +21,8 @@ require("nxvim-line").setup({
 })
 ```
 
-> **Status: Phases 1–4 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
-> works: the config model + the lualine→`nx.statusline` compiler, and the component
+> **Status: complete — all phases landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)).
+> `setup()` works: the config model + the lualine→`nx.statusline` compiler, and the component
 > library — `mode`, `branch`, `diff`, `diagnostics`, `filename` (path modes + `[+]`/`[-]`
 > flags), `filetype`, `encoding`, `lsp`, `progress`, `location`. `diff`/`diagnostics`
 > already colour with the editor's `Diff*`/`Diagnostic*` groups; `branch`/`diff` are
@@ -36,10 +36,9 @@ require("nxvim-line").setup({
 > `on_click`, and the periodic `refresh` timer. The async git source is debounced + bounded
 > with a `.git` watch (external commits/checkouts refresh the bar). Per-filetype
 > `extensions` (bundled `nxvim-tree`/`quickfix` + custom), `disabled_filetypes`, and a
-> `tabline` lowered onto the `%`-format engine round out the surface. Still to come: docs
-> polish (Phase 8). `fileformat` and `searchcount` are **deferred** —
-> they need editor primitives that don't exist yet, so naming them errors loud with the
-> reason.
+> `tabline` lowered onto the `%`-format engine round out the surface. Full manual:
+> `:help nxvim-line`. `fileformat` and `searchcount` are **deferred** — they need editor
+> primitives that don't exist yet, so naming them errors loud with the reason.
 
 ## How it works
 
@@ -106,14 +105,15 @@ sections = {
     { "diagnostics", sources = { "nvim_lsp" } },
   },
   lualine_x = {
-    { "filetype", colored = true },
-    { function() return os.date("%H:%M") end, cond = function() return true end },
+    { "filetype" },
+    { "location", cond = function() return true end },
   },
 }
 ```
 
-Every component table accepts `icon`, `color`, `separator`, `cond`, `fmt`, and
-`on_click`, plus component-specific keys.
+Every component table accepts `icon`, `color`, `padding`, `cond`, `fmt`, and
+`on_click`, plus component-specific keys. (An inline `function` _as_ a component is not
+supported — use `register_component` instead; the function-valued options above are.)
 
 ## Components
 
@@ -123,13 +123,13 @@ Every component table accepts `icon`, `color`, `separator`, `cond`, `fmt`, and
 | `branch`      | the current git branch                                       |
 | `diff`        | added / changed / removed line counts vs HEAD               |
 | `diagnostics` | per-severity LSP diagnostic counts, with icons              |
-| `filename`    | file name (tail / relative / absolute) + `[+]`/`[-]`/`[RO]` |
+| `filename`    | file name (tail / relative / absolute) + `[+]`/`[-]`        |
 | `filetype`    | the filetype, with a devicon                                 |
-| `fileformat`  | unix / dos / mac                                            |
 | `encoding`    | the file encoding                                           |
 | `progress`    | `Top` / `Bot` / `NN%` through the file                       |
 | `location`    | `line:col`                                                  |
 | `lsp`         | attached LSP client names                                   |
+| `label`       | static text (`{ "label", text = "…" }`)                     |
 | `fileformat`  | unix / dos / mac — **deferred** (needs a core option)        |
 | `searchcount` | `[n/N]` — **deferred** (needs core search-count state)       |
 
@@ -155,22 +155,34 @@ work as they do under lualine.
 
 ## Extending
 
+Call the `register_*` functions **before** `setup()` so the config sees them.
+
 ```lua
 local line = require("nxvim-line")
 
--- A custom component: `provide(ctx)` returns the cell; `events` invalidate it.
+-- A custom component: `provide(ctx, opts)` returns a cell `{ text, hl? }` (or a list of
+-- cells, or nil); `events` invalidate it (here it rides `options.refresh` instead).
 line.register_component("clock", {
   events = {},
-  provide = function(ctx) return { text = os.date("%H:%M"), icon = "" } end,
+  provide = function() return { text = os.date("%H:%M") } end,
 })
 
--- A custom theme.
+-- A custom theme (lualine's per-mode palette shape).
 line.register_theme("mine", {
   normal = { a = { fg = "#1e1e2e", bg = "#89b4fa" }, b = {...}, c = {...} },
   insert = { a = { fg = "#1e1e2e", bg = "#a6e3a1" } },
-  -- visual / replace / command / inactive …
+  -- visual / replace / command / terminal / inactive …
 })
+
+-- A custom extension (per-filetype layout) and extra filetype icons.
+line.register_extension("help", {
+  filetypes = { "help" },
+  sections = { lualine_a = { { "label", text = "Help" } } },
+})
+line.register_icons({ rs = "", name = { ["Makefile"] = "" } })
 ```
+
+Full reference: `:help nxvim-line` (the bundled manual, `doc/nxvim-line.txt`).
 
 ## Tests
 

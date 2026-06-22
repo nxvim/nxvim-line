@@ -422,19 +422,39 @@ Landed as `extensions.lua` + the layout-pick / tabline lowering in `compile.lua`
   without a tabline clears it. (Tests reset `filetype` between cases — `fresh_slate` reuses
   the `[No Name]` buffer, so a set filetype would otherwise leak.)
 
-## Phase 8 — Docs, help, examples, polish
+## Phase 8 — Docs, help, examples, polish ✅ (done)
 
-- **`examples/`** — a runnable `init.lua` (full lualine-style config, `theme = "auto"`,
-  git + diagnostics + icons) + a sample file, verified end-to-end (the example-config
-  convention). Loads the plugin from the checkout via a `dir=` spec (no `:PluginSync`).
-- **`doc/nxvim-line.txt`** — vim-help-format manual surfaced by nxvim-help
-  (`:help nxvim-line`); no `tags` file (auto-derived from `*anchors*`, like the siblings).
-  Covers options, every component + its options, themes + writing one, extensions, the
-  full config reference, and a "writing a custom component" worked example.
-- **README** — install via `:Plugins`, the config surface, a component table, theming,
-  and an "Extending" section (custom component + custom theme).
-- **Perf pass** — confirm no per-frame Lua (built-ins stay native; custom sections only
-  re-render on their events), debounce git, and bound every timer.
+The plugin is feature-complete. **53 tests pass.**
+
+- **`examples/`** ✅ — `init.lua` is the full lualine-style config (`theme = "auto"`, all
+  six sections, `inactive_sections`, `extensions`, git + diagnostics + icons) loading the
+  plugin from the checkout via a `dir=` spec, plus `sample.lua`. `test/example_spec.lua`
+  runs that exact config end-to-end (renders mode + location, no component errors), so the
+  example can't silently drift.
+- **`doc/nxvim-line.txt`** ✅ — the vim-help-format manual surfaced by nxvim-help
+  (`:help nxvim-line`); no `tags` file (auto-derived from the `*anchors*`). Covers setup,
+  every option, sections + the component spellings, every component + its options, themes
+  (using + writing + the `lualine_*` groups), extensions, the tabline, the full API, and a
+  "writing a custom component" worked example.
+- **README** ✅ — install via `:Plugins`, the config surface, the component table, theming,
+  and an "Extending" section (custom component / theme / extension / icons), corrected to
+  the implemented surface (no inline-function component; `padding` not `separator`).
+- **Perf** ✅ — no per-frame Lua by construction: the built-in segments resolve natively in
+  `nxvim-core` every frame, and the custom section segments run `render` ONLY on
+  invalidation (a declared event, `ModeChanged`, a git update, or the opt-out `refresh`
+  timer) — the server caches the published cells and paints them until the next
+  invalidation (ADR 0002 rule 4). Git is debounced + bounded (Phase 6); every timer is
+  generation-guarded and stoppable.
+
+---
+
+## Status: COMPLETE
+
+All eight phases landed. nxvim-line is a feature-complete, lualine-style statusline built
+entirely on the native `nx.statusline` primitive: the lualine config shape (sections,
+components, themes, separators, extensions, tabline) lowered onto ordered native segments,
+with the hot path in Rust. The deferred `fileformat` / `searchcount` components and winbar
+remain gated on small core additions (see *Out of scope*).
 
 ---
 
