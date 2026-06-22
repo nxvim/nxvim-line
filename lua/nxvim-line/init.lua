@@ -28,6 +28,7 @@
 local config = require("nxvim-line.config")
 local compile = require("nxvim-line.compile")
 local components = require("nxvim-line.components")
+local icons = require("nxvim-line.icons")
 
 local M = {}
 
@@ -57,6 +58,15 @@ end
 -- `sections`. Register it BEFORE setup() so config validation sees it.
 function M.register_component(name, spec)
   components.register(name, spec)
+  return M
+end
+
+-- register_icons(map): extend the filetype/extension glyph registry (`{ rs = "",
+-- name = { ["Makefile"] = "" } }`). Call BEFORE setup() so the new glyphs are live
+-- when sections first render. A devicons-equivalent can instead be wired wholesale via
+-- `setup{ options = { icon_provider = fn } }`.
+function M.register_icons(map)
+  icons.register(map)
   return M
 end
 

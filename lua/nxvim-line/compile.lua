@@ -14,8 +14,13 @@
 
 local components = require("nxvim-line.components")
 local git = require("nxvim-line.git")
+local icons = require("nxvim-line.icons")
+local highlights = require("nxvim-line.highlights")
 
 local M = {}
+
+-- lualine's default per-component padding: one space on each side.
+local DEFAULT_PADDING = 1
 
 -- The git-backed components: their presence in a layout activates the git data source.
 local GIT_COMPONENTS = { branch = true, diff = true }
@@ -52,27 +57,80 @@ local function normalize_cells(result)
   return out
 end
 
--- Render one section: each component contributes one or more cells, padded as a unit
--- (one leading + one trailing space around the whole component's run; the component
--- owns any spacing between its own sub-cells). A component whose `provide` errors
--- becomes a loud ` E:<name> ` cell rather than killing the section; a nil/empty result
--- contributes nothing. (Separators / per-component padding options are Phase 3.)
-local function render_section(comps, ctx)
-  local cells = {}
+-- Resolve a component's `padding` opt to (left, right) space counts. lualine accepts a
+-- number (both sides) or `{ left =, right = }`; absent → the section default.
+local function resolve_padding(comp, default)
+  local p = comp.padding
+  if p == nil then
+    return default, default
+  end
+  if type(p) == "number" then
+    return p, p
+  end
+  if type(p) == "table" then
+    return p.left or default, p.right or default
+  end
+  return default, default
+end
+
+-- The cells for ONE component: run `provide`, then apply the lualine per-component
+-- styling that is NOT padding/separators — a leading `icon` glyph and a `color` override.
+-- A `provide` error becomes a loud `E:<name>` cell (CLAUDE.md no-silent-stub); a nil /
+-- empty result is `{}`.
+local function component_cells(comp, ctx)
+  local spec = components.get(comp.name)
+  local ok, result = pcall(spec.provide, ctx, comp)
+  if not ok then
+    return { { text = "E:" .. comp.name, hl = "ErrorMsg" } }
+  end
+  local run = normalize_cells(result)
+  if #run == 0 then
+    return {}
+  end
+  -- lualine `icon`: a leading glyph (string, or `{ glyph, … }`) on the first cell. Honors
+  -- icons_enabled; a component's own default icon (branch/filetype/…) is emitted inside
+  -- its `provide`, so this is the per-component override/addition on top.
+  if icons.enabled() and comp.icon ~= nil then
+    local ic = type(comp.icon) == "table" and comp.icon[1] or comp.icon
+    if type(ic) == "string" and ic ~= "" then
+      run[1] = { text = ic .. " " .. run[1].text, hl = run[1].hl }
+    end
+  end
+  -- lualine component-level `color`: overrides every one of the component's cell hls
+  -- (a string group name, or a { fg, bg, gui } table interned by highlights.color_group).
+  if comp.color ~= nil then
+    local hl = highlights.color_group(comp.color)
+    for _, c in ipairs(run) do
+      c.hl = hl
+    end
+  end
+  return run
+end
+
+-- Render one section into a flat cell list. Each present component is padded (its own
+-- `padding`, else the section default) and the configured component separator glyph sits
+-- between adjacent components, drawn in the section's base highlight. An empty separator
+-- degrades to just the paddings. `opts = { component_sep, padding }`.
+local function render_section(comps, ctx, opts)
+  local pieces = {}
   for _, comp in ipairs(comps) do
-    local spec = components.get(comp.name)
-    local ok, result = pcall(spec.provide, ctx, comp)
-    if not ok then
-      cells[#cells + 1] = { text = " E:" .. comp.name .. " ", hl = "ErrorMsg" }
-    else
-      local run = normalize_cells(result)
-      if #run > 0 then
-        run[1] = { text = " " .. run[1].text, hl = run[1].hl }
-        run[#run] = { text = run[#run].text .. " ", hl = run[#run].hl }
-        for _, c in ipairs(run) do
-          cells[#cells + 1] = c
-        end
-      end
+    local run = component_cells(comp, ctx)
+    if #run > 0 then
+      pieces[#pieces + 1] = { comp = comp, cells = run }
+    end
+  end
+
+  local cells = {}
+  for i, piece in ipairs(pieces) do
+    if i > 1 and opts.component_sep ~= "" then
+      cells[#cells + 1] = { text = opts.component_sep }
+    end
+    local lpad, rpad = resolve_padding(piece.comp, opts.padding)
+    local run = piece.cells
+    run[1] = { text = string.rep(" ", lpad) .. run[1].text, hl = run[1].hl }
+    run[#run] = { text = run[#run].text .. string.rep(" ", rpad), hl = run[#run].hl }
+    for _, c in ipairs(run) do
+      cells[#cells + 1] = c
     end
   end
   return cells
@@ -102,7 +160,9 @@ local function has_git(comps)
   return false
 end
 
-local function build_side(config, keys, out, git_segs)
+local function build_side(config, keys, out, git_segs, component_sep)
+  local padding = DEFAULT_PADDING
+  local opts = { component_sep = component_sep, padding = padding }
   for _, sec in ipairs(keys) do
     local comps = config.sections[sec]
     if comps and #comps > 0 then
@@ -111,7 +171,7 @@ local function build_side(config, keys, out, git_segs)
         name = segname,
         events = union_events(comps),
         render = function(ctx)
-          return render_section(comps, ctx)
+          return render_section(comps, ctx, opts)
         end,
       })
       out[#out + 1] = segname
@@ -124,10 +184,20 @@ end
 
 -- build(config): (re)build the live statusline. Idempotent — see the module note.
 function M.build(config)
+  -- Styling configuration consumed by render: icon glyphs on/off + the interned-colour
+  -- cache reset (so generated NxLineColor groups don't accumulate across rebuilds).
+  icons.configure({
+    enabled = config.options.icons_enabled,
+    provider = config.options.icon_provider,
+  })
+  highlights.reset()
+
+  -- Left sections use `component_separators.left`, right sections `.right` (lualine).
+  local cs = config.options.component_separators
   local left, right = {}, {}
   local git_segs = {}
-  build_side(config, LEFT, left, git_segs)
-  build_side(config, RIGHT, right, git_segs)
+  build_side(config, LEFT, left, git_segs, cs.left)
+  build_side(config, RIGHT, right, git_segs, cs.right)
 
   vim.o.laststatus = config.options.globalstatus and 3 or 2
   nx.statusline.setup({ left = left, right = right })

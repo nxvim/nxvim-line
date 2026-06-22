@@ -21,14 +21,17 @@ require("nxvim-line").setup({
 })
 ```
 
-> **Status: Phases 1–2 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
+> **Status: Phases 1–3 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
 > works: the config model + the lualine→`nx.statusline` compiler, and the component
 > library — `mode`, `branch`, `diff`, `diagnostics`, `filename` (path modes + `[+]`/`[-]`
 > flags), `filetype`, `encoding`, `lsp`, `progress`, `location`. `diff`/`diagnostics`
 > already colour with the editor's `Diff*`/`Diagnostic*` groups; `branch`/`diff` are
-> driven by an async `git` source. Still to come: separators + icons (Phase 3), per-mode
-> theme colour (Phase 4). `fileformat` and `searchcount` are **deferred** — they need
-> editor primitives that don't exist yet, so naming them errors loud with the reason.
+> driven by an async `git` source. The lualine **look** is in: Nerd-Font icons
+> (`icons_enabled`, `register_icons`, an `icon_provider` hook), component separators
+> (`component_separators`), and per-component `color`/`padding`. Still to come: themes +
+> per-mode colour and the section powerline arrows (Phase 4). `fileformat` and
+> `searchcount` are **deferred** — they need editor primitives that don't exist yet, so
+> naming them errors loud with the reason.
 
 ## How it works
 
@@ -67,8 +70,9 @@ require("nxvim-line").setup({
   options = {
     theme = "auto",                          -- name | table | "auto" (derive from colorscheme)
     globalstatus = false,                    -- one bottom bar (laststatus = 3)
-    section_separators = { left = "", right = "" },
-    component_separators = { left = "", right = "" },
+    icons_enabled = true,                    -- Nerd-Font glyphs (false → plain text)
+    section_separators = { left = "", right = "" },     -- powerline arrows (Phase 4)
+    component_separators = { left = "", right = "" },   -- between components in a section
     disabled_filetypes = { statusline = { "nxvim-tree" } },
     refresh = { statusline = 1000 },         -- ms; time-varying sections
   },

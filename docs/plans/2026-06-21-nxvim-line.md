@@ -200,22 +200,50 @@ support added this phase — diagnostics/diff emit one coloured cell per part). 
   the deferred-component error, `git._parse_diff` (pure hunk classification), and a
   real-repo branch+diff end-to-end (a temp repo via `nx.test.tempdir()`).
 
-## Phase 3 — Separators, icons, per-component styling
+## Phase 3 — Separators, icons, per-component styling ✅ (done)
 
-The lualine *look*, still no mode-reactive colour.
+The lualine *look*, still no mode-reactive colour. Landed as `icons.lua` +
+`highlights.lua` + the styling pass in `compile.lua` (icon emission in `components.lua`),
+with `test/style_spec.lua`. **31 tests pass.**
 
-- **`icons.lua`** — filetype/extension → glyph registry (seeded like nxvim-tree's),
-  `setup{ icons = {...} }` overrides, and an optional `icon` provider hook so a user's
-  devicons-equivalent can drive it.
-- **`highlights.lua`** — section separators (powerline `` / `` defaults, configurable
-  incl. `""`), component separators (`` / ``), and the transition cells between two
-  adjacent sections (the separator cell paints `fg = next section bg`, `bg = this
-  section bg` — the powerline arrow). `padding` (left/right) and per-component `color`
-  (`{ fg, bg, gui }` or a highlight-group name) become per-cell `hl` groups defined via
-  `nx.hl.define`. Components emit their own icons here.
-- **Tests** (`test/style_spec.lua`): separators appear as cells with the right groups; a
-  per-component `color` defines and applies a group; padding widens a cell; empty
-  separators degrade cleanly.
+- **`icons.lua`** ✅ — a filename/extension → glyph registry sharing nxvim-tree's
+  Nerd-Font codepoints; `configure{ enabled, provider }` (from `options.icons_enabled` /
+  `options.icon_provider`), `register(map)` overrides (surfaced as
+  `require("nxvim-line").register_icons`), and an `icon` provider hook (a
+  devicons-equivalent) that wins over the tables. `enabled = false` returns nil for every
+  lookup so components render plain. The `filetype`/`branch`/`diagnostics` components emit
+  their own default glyphs gated on `icons.enabled()`.
+- **`highlights.lua`** ✅ — `color_group(color)` interns a lualine `color` (a `{ fg, bg,
+  sp, gui }` table → a generated `NxLineColor<N>` group via `nx.hl.define`, cached by
+  value; a string → the group name used as-is) and translates `gui = "bold,italic"` to
+  the nx.hl boolean attrs. `reset()` clears the cache each build so the group names don't
+  grow unbounded across rebuilds.
+- **The render pass** (`compile.lua`) ✅ — per component: a leading `icon` override, the
+  `color` override applied to every cell, then `padding` (number or `{ left, right }`,
+  default 1) framing the run, with the configured **component separator** glyph between
+  adjacent components (left half → `component_separators.left`, right → `.right`; `""`
+  degrades to just the paddings). The lualine powerline-glyph defaults now live in
+  `config.lua` (` / ` section arrows, ` / ` component separators), and a separator
+  option accepts the bare-string shorthand.
+- **Tests** (`test/style_spec.lua`) ✅ — icon resolution (ext / exact name / default /
+  disabled / provider / register); colour interning + caching + the string pass-through;
+  the component separator glyph appears between two components and an empty separator
+  degrades; padding widens the cell; a per-component `color` table defines + applies its
+  group (observed via `nx.hl`, since the status mirror carries text only).
+
+**Honest scope (reordered from the original sketch):**
+- **Section separators (the powerline arrows *between* sections) move to Phase 4.** The
+  arrow cell's two colours ARE the two adjacent sections' *background* colours, which only
+  exist once the theme defines the `lualine_<section>_<mode>` groups. So they are
+  inseparable from the theme and ship with it. Phase 3 owns the *component* separators
+  (drawn in the section's own highlight, no theme needed). The `section_separators`
+  option + its powerline-glyph defaults are in place now, consumed in Phase 4.
+- **Icon colour deferred.** A glyph rides inside its component's cell and inherits the
+  section highlight (no separate coloured icon cell yet) — lualine's `colored` filetype
+  option is a later refinement. Keeps Phase 3 off the theme's section groups.
+- **Per-component `separator` override deferred to Phase 4** — lualine's per-component
+  `separator` overrides the *section-edge* powerline separator, so it belongs with the
+  section separators it parameterizes.
 
 ## Phase 4 — Themes + mode-reactive colour
 

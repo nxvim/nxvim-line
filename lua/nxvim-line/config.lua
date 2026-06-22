@@ -32,8 +32,12 @@ local DEFAULTS = {
   options = {
     theme = "auto",
     globalstatus = false,
-    section_separators = { left = "", right = "" },
-    component_separators = { left = "", right = "" },
+    icons_enabled = true,
+    -- lualine's powerline-glyph defaults: section arrows  /  (consumed in Phase 4) and
+    -- the thinner component separators  /  (Phase 3). Written as \u escapes so the
+    -- source stays ASCII; set to "" to drop them.
+    section_separators = { left = "\u{e0b0}", right = "\u{e0b2}" },
+    component_separators = { left = "\u{e0b1}", right = "\u{e0b3}" },
     disabled_filetypes = { statusline = {} },
     refresh = { statusline = 1000 },
   },
@@ -113,6 +117,22 @@ function M._normalize_sections(sections, where)
   end
 end
 
+-- Normalize a separator option to `{ left = …, right = … }`. lualine accepts the bare
+-- string shorthand (`component_separators = "|"` → both sides) and the explicit table;
+-- `""` / nil mean "no separator". Anything else errors loud rather than rendering oddly.
+function M._normalize_separators(s)
+  if s == nil then
+    return { left = "", right = "" }
+  end
+  if type(s) == "string" then
+    return { left = s, right = s }
+  end
+  if type(s) == "table" then
+    return { left = s.left or "", right = s.right or "" }
+  end
+  error("nxvim-line.setup: a separator option must be a string or { left =, right = } table")
+end
+
 -- merge(base, opts): deep-merge `opts` over `base`, then normalize + validate. A user
 -- `sections`/`inactive_sections` entry REPLACES that section's default list wholesale
 -- (lualine semantics — you redefine a section, you don't merge its component list);
@@ -155,6 +175,9 @@ function M.merge(base, opts)
 
   M._normalize_sections(cfg.sections, "sections")
   M._normalize_sections(cfg.inactive_sections, "inactive_sections")
+
+  cfg.options.section_separators = M._normalize_separators(cfg.options.section_separators)
+  cfg.options.component_separators = M._normalize_separators(cfg.options.component_separators)
 
   return cfg
 end

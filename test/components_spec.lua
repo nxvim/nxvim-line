@@ -40,7 +40,11 @@ nx.test.describe("nxvim-line.components", function()
   end)
 
   nx.test.it("diagnostics counts injected diagnostics per severity", function(t)
-    line.setup({ options = { globalstatus = true }, sections = { lualine_b = { "diagnostics" } } })
+    -- icons_enabled = false keeps the readable E:/W: letters (default is glyphs now).
+    line.setup({
+      options = { globalstatus = true, icons_enabled = false },
+      sections = { lualine_b = { "diagnostics" } },
+    })
     nudge(t)
     local ns = vim.api.nvim_create_namespace("nxline_diag_test")
     nx.diagnostic.set(ns, 0, {

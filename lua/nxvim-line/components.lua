@@ -10,10 +10,12 @@
 -- focused }` comes from nx.statusline, so a component reads the *rendered window's*
 -- buffer/cursor.
 --
--- Icons + per-mode theme colour arrive in Phase 3/4; the per-severity diagnostic and
--- per-kind diff colours below use the editor's existing Diagnostic*/Diff* groups.
+-- Components emit their own default icons (Phase 3) gated on `icons.enabled()`; the
+-- per-severity diagnostic and per-kind diff colours use the editor's existing
+-- Diagnostic*/Diff* groups. Per-mode theme colour arrives in Phase 4.
 
 local git = require("nxvim-line.git")
+local icons = require("nxvim-line.icons")
 
 local M = {}
 
@@ -110,12 +112,19 @@ M.register("filename", {
 
 -- ----- filetype / encoding ---------------------------------------------------
 
+-- The devicon is resolved from the buffer's *filename* (extension/exact name), the same
+-- as lualine's nvim-web-devicons lookup; the glyph rides in the cell and inherits the
+-- section highlight. With icons disabled (`icons_enabled = false`) the name shows plain.
 M.register("filetype", {
   events = { "FileType", "BufEnter" },
   provide = function(ctx)
     local ft = nx.bo[ctx.buf].filetype
     if not ft or ft == "" then
       return nil
+    end
+    local glyph = icons.for_name(nx.buf.name(ctx.buf))
+    if glyph then
+      return { text = glyph .. " " .. ft }
     end
     return { text = ft }
   end,
@@ -159,16 +168,18 @@ M.register("progress", {
 
 -- ----- diagnostics -----------------------------------------------------------
 
--- opts.symbols overrides the per-severity prefix. Phase 2 uses readable letters and
--- colours each count with the editor's existing Diagnostic* groups; Phase 3 swaps in
--- glyph icons.
-local DIAG_SYMBOLS = { error = "E:", warn = "W:", info = "I:", hint = "H:" }
+-- opts.symbols overrides the per-severity prefix. With icons on, Nerd-Font glyphs (a
+-- trailing space separating glyph from count); with icons off, readable letters. Each
+-- count is coloured with the editor's existing Diagnostic* groups.
+local DIAG_GLYPHS =
+  { error = "\u{f057} ", warn = "\u{f071} ", info = "\u{f05a} ", hint = "\u{f0eb} " }
+local DIAG_LETTERS = { error = "E:", warn = "W:", info = "I:", hint = "H:" }
 local DIAG_HL = { "DiagnosticError", "DiagnosticWarn", "DiagnosticInfo", "DiagnosticHint" }
 
 M.register("diagnostics", {
   events = { "LspDiagnostics", "BufEnter" },
   provide = function(ctx, opts)
-    local sym = (opts and opts.symbols) or DIAG_SYMBOLS
+    local sym = (opts and opts.symbols) or (icons.enabled() and DIAG_GLYPHS or DIAG_LETTERS)
     local syms = { sym.error, sym.warn, sym.info, sym.hint }
     local counts = { 0, 0, 0, 0 } -- ERROR, WARN, INFO, HINT (severity 1..4)
     for _, d in ipairs(nx.diagnostic.get(ctx.buf)) do
@@ -218,6 +229,9 @@ M.register("lsp", {
 -- cache-miss fetch, then `git`'s own update invalidates the segment to paint the result.
 -- compile activates/deactivates the git module based on whether either is in the layout.
 
+-- The branch glyph (nf-pl-branch ) when icons are on; the bare name otherwise.
+local BRANCH_ICON = "\u{e0a0} "
+
 M.register("branch", {
   events = { "BufEnter", "TextChanged" },
   provide = function(ctx)
@@ -227,7 +241,7 @@ M.register("branch", {
     if not b or b == "" then
       return nil
     end
-    return { text = b } -- Phase 3 adds the  icon
+    return { text = (icons.enabled() and BRANCH_ICON or "") .. b }
   end,
 })
 
