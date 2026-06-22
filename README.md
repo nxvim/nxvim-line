@@ -21,13 +21,14 @@ require("nxvim-line").setup({
 })
 ```
 
-> **Status: Phase 1 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
-> works: the config model + the lualine→`nx.statusline` compiler, with the `mode`,
-> `filename`, `filetype`, `diagnostics`, `progress`, and `location` components (plain
-> text — separators, icons, and per-mode theme colour arrive in later phases). The
-> components/themes below that aren't in that list (`branch`, `diff`, `encoding`,
-> `fileformat`, `lsp`, `searchcount`, themes) are **planned** — naming one in `sections`
-> errors loud until its phase lands. The sections below describe the **target** design.
+> **Status: Phases 1–2 landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)). `setup()`
+> works: the config model + the lualine→`nx.statusline` compiler, and the component
+> library — `mode`, `branch`, `diff`, `diagnostics`, `filename` (path modes + `[+]`/`[-]`
+> flags), `filetype`, `encoding`, `lsp`, `progress`, `location`. `diff`/`diagnostics`
+> already colour with the editor's `Diff*`/`Diagnostic*` groups; `branch`/`diff` are
+> driven by an async `git` source. Still to come: separators + icons (Phase 3), per-mode
+> theme colour (Phase 4). `fileformat` and `searchcount` are **deferred** — they need
+> editor primitives that don't exist yet, so naming them errors loud with the reason.
 
 ## How it works
 
@@ -117,7 +118,8 @@ Every component table accepts `icon`, `color`, `separator`, `cond`, `fmt`, and
 | `progress`    | `Top` / `Bot` / `NN%` through the file                       |
 | `location`    | `line:col`                                                  |
 | `lsp`         | attached LSP client names                                   |
-| `searchcount` | `[n/N]` for the active search                               |
+| `fileformat`  | unix / dos / mac — **deferred** (needs a core option)        |
+| `searchcount` | `[n/N]` — **deferred** (needs core search-count state)       |
 
 ## Themes
 

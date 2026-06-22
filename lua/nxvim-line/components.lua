@@ -1,21 +1,35 @@
--- nxvim-line.components: the component registry + the Phase-1 component library.
+-- nxvim-line.components: the component registry + the component library.
 --
--- A component is `{ events = {...}, provide = function(ctx, opts) -> cell | nil }`:
---   * `provide` is PURE — it reads editor state through `nx.*` and returns a single
---     cell `{ text = "...", hl? = "Group", icon? = "..." }` (or nil for nothing). It
---     runs only when the section is invalidated, never per frame.
---   * `events` are the autocmd events that should invalidate a section using this
---     component. `compile` unions a section's components' events and hands them to
---     `nx.statusline.segment`, which wires the invalidation.
---   * `ctx = { buf, win, focused }` comes from nx.statusline, so a component reads the
---     *rendered window's* buffer/cursor, not just the current one.
+-- A component is `{ events = {...}, provide = function(ctx, opts) -> result }` where
+-- `result` is nil (nothing), a single cell `{ text = "...", hl? = "Group" }`, or a
+-- LIST of cells `{ {text, hl}, ... }` (e.g. diagnostics / diff, one coloured cell per
+-- part). `provide` is PURE — it reads editor state through `nx.*` and returns cells; it
+-- runs only when the section is invalidated, never per frame. `events` are the autocmd
+-- events that invalidate a section using the component; `compile` unions a section's
+-- components' events and hands them to `nx.statusline.segment`. `ctx = { buf, win,
+-- focused }` comes from nx.statusline, so a component reads the *rendered window's*
+-- buffer/cursor.
 --
--- Phase 2+ splits these into components/<name>.lua and adds branch/diff/encoding/
--- fileformat/lsp/searchcount; icons + per-component colour arrive in Phase 3/4.
+-- Icons + per-mode theme colour arrive in Phase 3/4; the per-severity diagnostic and
+-- per-kind diff colours below use the editor's existing Diagnostic*/Diff* groups.
+
+local git = require("nxvim-line.git")
 
 local M = {}
 
 M._registry = {}
+
+-- Components named in the plan but not yet buildable — they need an editor primitive
+-- that doesn't exist. Naming one in `sections` errors with the reason (config.lua),
+-- rather than silently rendering nothing (CLAUDE.md: no silent stubs).
+M._deferred = {
+  fileformat = "needs a core 'fileformat' option (unix/dos/mac is not modelled yet)",
+  searchcount = "needs core search-count state (last pattern + match count)",
+}
+
+function M.deferred_reason(name)
+  return M._deferred[name]
+end
 
 -- register(name, spec): add a component. Public via `require("nxvim-line").register_component`.
 function M.register(name, spec)
@@ -39,7 +53,7 @@ function M.get(name)
   return M._registry[name]
 end
 
--- ----- the Phase-1 components ------------------------------------------------
+-- ----- mode ------------------------------------------------------------------
 
 -- Short mode code (`nx.mode().mode`) -> a lualine-style label.
 local MODE_LABEL = {
@@ -60,17 +74,41 @@ M.register("mode", {
   end,
 })
 
+-- ----- filename --------------------------------------------------------------
+
+-- opts.path: 0 = tail (default), 1 = relative to cwd, 2 = absolute. The modified /
+-- nomodifiable flags ride along ([+] / [-]).
 M.register("filename", {
-  events = { "BufEnter", "BufWritePost" },
-  provide = function(ctx)
-    local name = nx.buf.name(ctx.buf)
+  events = { "BufEnter", "BufWritePost", "TextChanged", "InsertLeave" },
+  provide = function(ctx, opts)
+    local buf = ctx.buf
+    local name = nx.buf.name(buf)
+    local path_mode = (opts and opts.path) or 0
+    local shown
     if name == "" then
-      return { text = "[No Name]" }
+      shown = "[No Name]"
+    elseif path_mode == 1 then
+      local cwd = vim.fn.getcwd()
+      if cwd ~= "" and name:sub(1, #cwd + 1) == cwd .. "/" then
+        shown = name:sub(#cwd + 2)
+      else
+        shown = name
+      end
+    elseif path_mode == 2 then
+      shown = name
+    else
+      shown = name:match("[^/]*$") or name
     end
-    -- Phase 1: the tail only. Phase 2 adds path modes + [+]/[-]/[RO] flags.
-    return { text = name:match("[^/]*$") or name }
+    if nx.bo[buf].modified then
+      shown = shown .. " [+]"
+    elseif nx.bo[buf].modifiable == false then
+      shown = shown .. " [-]"
+    end
+    return { text = shown }
   end,
 })
+
+-- ----- filetype / encoding ---------------------------------------------------
 
 M.register("filetype", {
   events = { "FileType", "BufEnter" },
@@ -82,6 +120,19 @@ M.register("filetype", {
     return { text = ft }
   end,
 })
+
+M.register("encoding", {
+  events = { "BufEnter", "BufReadPost" },
+  provide = function(ctx)
+    local enc = nx.bo[ctx.buf].fileencoding
+    if not enc or enc == "" then
+      return nil
+    end
+    return { text = enc }
+  end,
+})
+
+-- ----- location / progress ---------------------------------------------------
 
 M.register("location", {
   events = { "CursorMoved", "CursorMovedI" },
@@ -106,9 +157,19 @@ M.register("progress", {
   end,
 })
 
+-- ----- diagnostics -----------------------------------------------------------
+
+-- opts.symbols overrides the per-severity prefix. Phase 2 uses readable letters and
+-- colours each count with the editor's existing Diagnostic* groups; Phase 3 swaps in
+-- glyph icons.
+local DIAG_SYMBOLS = { error = "E:", warn = "W:", info = "I:", hint = "H:" }
+local DIAG_HL = { "DiagnosticError", "DiagnosticWarn", "DiagnosticInfo", "DiagnosticHint" }
+
 M.register("diagnostics", {
   events = { "LspDiagnostics", "BufEnter" },
-  provide = function(ctx)
+  provide = function(ctx, opts)
+    local sym = (opts and opts.symbols) or DIAG_SYMBOLS
+    local syms = { sym.error, sym.warn, sym.info, sym.hint }
     local counts = { 0, 0, 0, 0 } -- ERROR, WARN, INFO, HINT (severity 1..4)
     for _, d in ipairs(nx.diagnostic.get(ctx.buf)) do
       local s = d.severity
@@ -116,18 +177,77 @@ M.register("diagnostics", {
         counts[s] = counts[s] + 1
       end
     end
-    -- Phase 1: plain "E:n W:n …" text. Phase 2 adds icons + per-severity colours.
-    local labels = { "E", "W", "I", "H" }
-    local parts = {}
+    local cells = {}
     for i = 1, 4 do
       if counts[i] > 0 then
-        parts[#parts + 1] = labels[i] .. ":" .. counts[i]
+        local prefix = #cells > 0 and " " or ""
+        cells[#cells + 1] = { text = prefix .. syms[i] .. counts[i], hl = DIAG_HL[i] }
       end
     end
-    if #parts == 0 then
+    if #cells == 0 then
       return nil
     end
-    return { text = table.concat(parts, " ") }
+    return cells
+  end,
+})
+
+-- ----- lsp -------------------------------------------------------------------
+
+M.register("lsp", {
+  events = { "LspAttach", "BufEnter" },
+  provide = function(ctx)
+    local names = {}
+    for _, c in ipairs(nx.lsp.clients({ bufnr = ctx.buf }) or {}) do
+      if c.name then
+        names[#names + 1] = c.name
+      end
+    end
+    if #names == 0 then
+      return nil
+    end
+    return { text = table.concat(names, ",") }
+  end,
+})
+
+-- ----- branch / diff (git, async via nxvim-line.git) -------------------------
+
+-- No declared `events`: the git module's own autocmds refresh the cache and invalidate
+-- these segments; a buffer swap re-renders them (the layout-change rerender) so they
+-- pick up the new buffer's cached value instantly. compile activates/deactivates the
+-- git module based on whether either is in the layout.
+
+M.register("branch", {
+  events = {},
+  provide = function(ctx)
+    local b = git.branch_of(ctx.buf)
+    if not b or b == "" then
+      return nil
+    end
+    return { text = b } -- Phase 3 adds the  icon
+  end,
+})
+
+M.register("diff", {
+  events = {},
+  provide = function(ctx)
+    local d = git.diff_of(ctx.buf)
+    if not d then
+      return nil
+    end
+    local cells = {}
+    local function push(n, prefix, hl)
+      if n > 0 then
+        local sep = #cells > 0 and " " or ""
+        cells[#cells + 1] = { text = sep .. prefix .. n, hl = hl }
+      end
+    end
+    push(d.added, "+", "DiffAdd")
+    push(d.changed, "~", "DiffChange")
+    push(d.removed, "-", "DiffDelete")
+    if #cells == 0 then
+      return nil
+    end
+    return cells
   end,
 })
 

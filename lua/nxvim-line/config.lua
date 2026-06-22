@@ -39,9 +39,9 @@ local DEFAULTS = {
   },
   sections = {
     lualine_a = { "mode" },
-    lualine_b = { "diagnostics" },
+    lualine_b = { "branch", "diff", "diagnostics" },
     lualine_c = { "filename" },
-    lualine_x = { "filetype" },
+    lualine_x = { "encoding", "filetype" }, -- `fileformat` deferred (no core option yet)
     lualine_y = { "progress" },
     lualine_z = { "location" },
   },
@@ -87,6 +87,10 @@ function M._normalize_entry(entry, where)
         .. where
         .. ")"
     )
+  end
+  local deferred = components.deferred_reason(norm.name)
+  if deferred then
+    error("nxvim-line: component '" .. norm.name .. "' is not available yet — " .. deferred)
   end
   if not components.is_known(norm.name) then
     error("nxvim-line: unknown component '" .. norm.name .. "' (" .. where .. ")")

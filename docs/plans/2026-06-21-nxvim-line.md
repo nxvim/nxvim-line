@@ -152,28 +152,45 @@ Original step list (for reference):
   segment names + left/right layout; the projected `status` text matches; an unknown
   component errors; `setup()` twice doesn't double-register.
 
-## Phase 2 — Component library
+## Phase 2 — Component library ✅ (done)
 
-Each component is a module returning `{ events = {...}, provide = function(ctx) ->
-{ text, hl?, icon? } | nil }`. Pure `provide`; events drive invalidation.
+Each component is `{ events = {...}, provide = function(ctx, opts) -> result }` where
+`result` is nil, a single cell `{ text, hl }`, or a **list of cells** (the multi-cell
+support added this phase — diagnostics/diff emit one coloured cell per part). Pure
+`provide`; events drive invalidation. Landed in `components.lua` + `git.lua`, with
+`components_spec.lua`. **21 tests pass.**
 
-- **`mode`** — long/short mode name (`NORMAL`/`N`), the data source for Phase 4's colour.
-- **`branch`** — current git branch (from `git.lua`'s cache; events: `BufEnter`,
-  `DirChanged`-equivalent, + explicit invalidate when the async job returns).
-- **`diff`** — added/changed/removed counts vs HEAD (from `git.lua`), each its own
-  coloured sub-cell with an icon.
-- **`diagnostics`** — per-severity counts with icons and `DiagnosticError/Warn/Info/Hint`
-  colours; sources configurable; built on `nx.diagnostic.get`; event `LspDiagnostics`.
-- **`filename`** — tail / relative / absolute (`path = 0|1|2`), `[+]`/`[-]`/`[RO]` flags
-  (`modified`, `readonly`), shorten-when-narrow.
-- **`filetype`** — name + devicon (Phase 3 icons).
-- **`fileformat`** — unix/dos/mac glyph. **`encoding`** — `'fileencoding'` + BOM.
-- **`progress`** — `Top`/`Bot`/`NN%`. **`location`** — `line:col`, `%l:%c` style.
-- **`lsp`** — attached client names (`nx.lsp.clients`); event `LspAttach`.
-- **`searchcount`** — `[n/N]` for the active search (computed in Lua; events:
-  `CursorMoved` while a search is active + on `/`/`?`).
-- **Tests**: each component's `provide` against a fake `ctx`, plus end-to-end text in a
-  driven editor for the stateful ones (branch/diff/diagnostics/searchcount).
+- **`mode`** ✅ — lualine-style label; the data source for Phase 4's colour.
+- **`branch`** ✅ — current git branch, from the async `git.lua` source.
+- **`diff`** ✅ — added/changed/removed counts vs HEAD, each a coloured sub-cell
+  (`DiffAdd`/`DiffChange`/`DiffDelete`); from `git.lua`. (Icons in Phase 3.)
+- **`diagnostics`** ✅ — per-severity counts, each coloured with the editor's
+  `Diagnostic{Error,Warn,Info,Hint}` groups; configurable `symbols`; `LspDiagnostics`.
+- **`filename`** ✅ — tail / relative / absolute (`path = 0|1|2`) + `[+]`/`[-]` flags.
+  (`readonly` isn't exposed by `nx.bo`, so `[-]` tracks `nomodifiable`; shorten-when-narrow
+  is Phase 3.)
+- **`filetype`** ✅ — the name (devicon in Phase 3).
+- **`encoding`** ✅ — `'fileencoding'`.
+- **`progress`** ✅ — `Top`/`Bot`/`NN%`. **`location`** ✅ — `line:col`.
+- **`lsp`** ✅ — attached client names (`nx.lsp.clients`); `LspAttach`.
+
+**Reordered from the original sketch (honest scope):**
+- **`git.lua` pulled forward from Phase 6** so `branch`/`diff` are *real*, not silent
+  stubs reading an empty cache. It runs `git` via `nx.run` off the tick, caches per
+  directory, and invalidates only the hosting segments on fresh data; `provide` stays
+  pure (reads the cache). A refresh is deferred to the next tick (`nx.on_next_tick`) so a
+  freshly-`:edit`ed buffer's name is settled before the directory is resolved. **Phase 6
+  is now "git polish"** (debounce, staleness, a watch) rather than the initial build.
+- **`fileformat` and `searchcount` DEFERRED** — each needs an editor primitive that
+  doesn't exist: a core `'fileformat'` option (unix/dos/mac isn't modelled), and a
+  search-count state surface (last pattern + match count). They are **not registered**;
+  naming one in `sections` errors loud with the reason (`components._deferred`) rather
+  than silently rendering nothing. Both become follow-ups gated on a small core addition.
+
+- **Tests** (`components_spec.lua`): filename `[+]` flag (after an edit), encoding,
+  injected diagnostics per severity (`nx.diagnostic.set`), `lsp` → nil with no client,
+  the deferred-component error, `git._parse_diff` (pure hunk classification), and a
+  real-repo branch+diff end-to-end (a temp repo via `nx.test.tempdir()`).
 
 ## Phase 3 — Separators, icons, per-component styling
 
@@ -261,17 +278,22 @@ provides*) makes this **event-driven and precise**, with no polling.
 - **Tests**: an inactive split shows `inactive_sections`; `cond=false` hides a component;
   `fmt` transforms text; a click fires its handler; `globalstatus` flips `laststatus`.
 
-## Phase 6 — Async git (`git.lua`)
+## Phase 6 — Git polish (`git.lua`)
 
-- Branch + per-file diff counts via `nx.run` (`git rev-parse`, `git diff --numstat` /
-  `--shortstat` against HEAD), keyed by repo/file, **off the editor thread**; on
-  completion cache the result and `nx.statusline.invalidate("NxLineB")` (or whichever
-  sections host `branch`/`diff`).
-- Recompute triggers: `BufEnter`, `BufWritePost`, directory change, and a debounced
-  refresh. Bounded/cancellable so a slow repo never blocks (the "editor must never
-  freeze" rule).
-- **Tests** (`test/git_spec.lua`): a real init'd repo — branch shows; an edit+write
-  updates diff counts; a non-repo buffer shows nothing (no error).
+The async `git.lua` source **landed in Phase 2** (branch + per-file diff via `nx.run`,
+cached per directory, invalidating only the hosting segments; non-repo buffers show
+nothing). This phase is the remaining robustness:
+
+- **Debounce + staleness** — coalesce the per-`BufEnter`/`BufWritePost` refresh (today a
+  git run fires on every such event for the dir), and skip a run when the cache is fresh.
+- **Cancellation / bounding** — ensure a slow repo never piles up work (the "editor must
+  never freeze" rule); cap concurrent runs.
+- **A watch** — refresh on external changes to the repo (index/HEAD), not just editor
+  events.
+- Possibly **`--numstat`/`--shortstat`** as an alternative to the `-U0` hunk parse, and
+  richer comparisons (a rev, the index).
+- **Tests** extend `components_spec`'s git case: debounce collapses a burst; a non-repo
+  buffer stays clean.
 
 ## Phase 7 — Extensions, tabline
 
@@ -341,6 +363,10 @@ idempotent and validates loud: an unknown component / theme / section is a hard 
 
 ## Out of scope (v1)
 
+- **`fileformat` / `searchcount` components** — deferred pending core primitives: a
+  `'fileformat'` option (unix/dos/mac) and a search-count state surface (last pattern +
+  match count). Registered as *deferred* so naming one errors loud with the reason; each
+  is a follow-up gated on a small core addition.
 - **Winbar** — needs a `'winbar'` option in nxvim-core (a separate core dependency).
 - **Tabline beyond `%`-format lowering** — clickable per-tab segment regions on the
   tabline track the core's tabline `%@…@` work, not this plugin.
