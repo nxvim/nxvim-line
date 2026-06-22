@@ -84,3 +84,21 @@ nx.test.describe("nxvim-line.searchcount", function()
     t:feed("<Esc>")
   end)
 end)
+
+nx.test.describe("nxvim-line.fileformat", function()
+  nx.test.it("shows the buffer's line-ending style (dos for a CRLF file)", function(t)
+    local dir = nx.test.tempdir()
+    nx.await(nx.fs.write(dir .. "/crlf.txt", "one\r\ntwo\r\n"))
+    line.setup({
+      options = { globalstatus = true },
+      sections = { lualine_x = { "fileformat" } },
+    })
+    nudge(t)
+    t:feed(":edit " .. dir .. "/crlf.txt<CR>")
+    local sl = t:wait_for(function()
+      local s = t:statusline()
+      return s:find("dos") and s
+    end)
+    nx.test.expect(sl).to_contain("dos")
+  end)
+end)

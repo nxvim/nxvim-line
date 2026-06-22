@@ -129,6 +129,8 @@ re-renders only on its own events (never per frame).
 			0 (tail, default) | 1 (relative to cwd) | 2 (absolute).
 	filetype	The filetype, with its devicon. (|nxvim-line-icons|)
 	encoding	'fileencoding'.
+	fileformat	The line-ending style — unix / dos / mac
+			('fileformat'). Opt `symbols` maps each to a glyph.
 	progress	Top / Bot / NN% through the buffer.
 	location	line:col.
 	lsp		Attached LSP client names.
@@ -146,8 +148,8 @@ the per-component options (|nxvim-line-component-options|) apply on top. It
 carries no events, so it updates on `refresh` or a sibling component's event.
 
 							*nxvim-line-deferred*
-`fileformat` is DEFERRED — it needs an editor primitive that does not exist
-yet (a `'fileformat'` option). It is registered as deferred, so naming it in
+No components are deferred today. The deferred mechanism remains: a component
+gated on a missing editor primitive is registered as deferred, so naming it in
 `sections` errors loud with the reason rather than rendering nothing.
 
 ==============================================================================
@@ -300,7 +302,7 @@ independently (as `diff` / `diagnostics` do).
 ==============================================================================
 NOT SUPPORTED						*nxvim-line-unsupported*
 
-- `fileformat` component — deferred (|nxvim-line-deferred|).
-- Winbar — needs a `'winbar'` option in nxvim-core.
+- Winbar — needs a `'winbar'` option in nxvim-core (a per-window bar is a
+  separate, large core feature spanning every client renderer).
 
  vim:tw=78:ft=help:

@@ -36,9 +36,10 @@ require("nxvim-line").setup({
 > `on_click`, and the periodic `refresh` timer. The async git source is debounced + bounded
 > with a `.git` watch (external commits/checkouts refresh the bar). Per-filetype
 > `extensions` (bundled `nxvim-tree`/`quickfix` + custom), `disabled_filetypes`, and a
-> `tabline` lowered onto the `%`-format engine round out the surface. Full manual:
-> `:help nxvim-line`. `fileformat` and `searchcount` are **deferred** — they need editor
-> primitives that don't exist yet, so naming them errors loud with the reason.
+> `tabline` lowered onto the `%`-format engine round out the surface. Inline-function
+> components, `searchcount`, and `fileformat` are all implemented (the last on a new core
+> `'fileformat'` option); only winbar stays out of scope (a separate core feature). Full
+> manual: `:help nxvim-line`.
 
 ## How it works
 
@@ -132,7 +133,7 @@ the component's text.
 | `lsp`         | attached LSP client names                                   |
 | `label`       | static text (`{ "label", text = "…" }`)                     |
 | `searchcount` | `[idx/total]` of the last search (bounded `maxcount`)        |
-| `fileformat`  | unix / dos / mac — **deferred** (needs a core option)        |
+| `fileformat`  | unix / dos / mac (the line-ending style)                     |
 
 ## Themes
 

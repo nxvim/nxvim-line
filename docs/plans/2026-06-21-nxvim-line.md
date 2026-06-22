@@ -450,11 +450,12 @@ The plugin is feature-complete. **53 tests pass.**
 
 ## Status: COMPLETE
 
-All eight phases landed. nxvim-line is a feature-complete, lualine-style statusline built
-entirely on the native `nx.statusline` primitive: the lualine config shape (sections,
+All eight phases landed, plus the post-v1 deferred items (inline-function components,
+`searchcount`, `fileformat`). nxvim-line is a feature-complete, lualine-style statusline
+built entirely on the native `nx.statusline` primitive: the lualine config shape (sections,
 components, themes, separators, extensions, tabline) lowered onto ordered native segments,
-with the hot path in Rust. The deferred `fileformat` / `searchcount` components and winbar
-remain gated on small core additions (see *Out of scope*).
+with the hot path in Rust. Only winbar stays out of scope — a large core feature, not a
+small addition (see *Out of scope*).
 
 ---
 
@@ -496,13 +497,26 @@ of `icon`, `color`, `separator`, `cond`, `fmt`, `on_click`, and component-specif
 (e.g. `filename.path`, `diagnostics.sources`) — the lualine shape. `setup()` is
 idempotent and validates loud: an unknown component / theme / section is a hard error.
 
+## Post-v1 — the deferred items, now implemented
+
+The three items the phases deferred have landed (commits after Phase 8):
+
+- **Inline function components** (`{ function() … end }`) — pure plugin: config keeps the
+  function on `_inline` with a synthetic name; `component_cells` calls it and applies the
+  whole pipeline (fmt/icon/color/on_click/padding) on top.
+- **`searchcount`** — pure plugin, no core change: the pattern is the read-only `/`
+  register (`vim.fn.getreg('/')`); matches are enumerated WITH positions via the native
+  `nx.buf.search` (vim engine), so the cursor's index is exact. Bounded by `maxcount`.
+- **`fileformat`** — a small core addition (nxvim repo): a `'fileformat'` buffer option
+  (unix/dos/mac), detected from the bytes on read (the rope normalized to `\n`), honored on
+  write (`to_save_bytes` converts), settable via `:set ff=`, and mirrored to
+  `nx.bo.fileformat`. The component reads that mirror.
+
 ## Out of scope (v1)
 
-- **`fileformat` / `searchcount` components** — deferred pending core primitives: a
-  `'fileformat'` option (unix/dos/mac) and a search-count state surface (last pattern +
-  match count). Registered as *deferred* so naming one errors loud with the reason; each
-  is a follow-up gated on a small core addition.
-- **Winbar** — needs a `'winbar'` option in nxvim-core (a separate core dependency).
+- **Winbar** — needs a `'winbar'` option in nxvim-core: a per-window bar is a separate,
+  large core feature spanning the layout model, the `View` protocol, and every client
+  renderer (TUI/GUI/web) — far beyond a plugin or a small core addition.
 - **Tabline beyond `%`-format lowering** — clickable per-tab segment regions on the
   tabline track the core's tabline `%@…@` work, not this plugin.
 - **A native built-in `git`/`lsp_progress` segment** — these are plugin components by

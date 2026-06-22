@@ -68,14 +68,6 @@ nx.test.describe("nxvim-line.components", function()
     local cell = components.get("lsp").provide({ buf = nx.buf.current(), win = nx.win.current() })
     nx.test.expect(cell).to_be_nil()
   end)
-
-  nx.test.it("rejects a deferred component with a clear reason", function()
-    nx.test
-      .expect(function()
-        line.setup({ sections = { lualine_x = { "fileformat" } } })
-      end)
-      .to_error("not available yet")
-  end)
 end)
 
 nx.test.describe("nxvim-line.git", function()

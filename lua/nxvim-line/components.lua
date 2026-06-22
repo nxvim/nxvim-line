@@ -23,10 +23,11 @@ M._registry = {}
 
 -- Components named in the plan but not yet buildable — they need an editor primitive
 -- that doesn't exist. Naming one in `sections` errors with the reason (config.lua),
--- rather than silently rendering nothing (CLAUDE.md: no silent stubs).
-M._deferred = {
-  fileformat = "needs a core 'fileformat' option (unix/dos/mac is not modelled yet)",
-}
+-- rather than silently rendering nothing (CLAUDE.md: no silent stubs). Empty today: the
+-- formerly-deferred `fileformat` (now a core `'fileformat'` option) and `searchcount`
+-- (computed in-plugin via `nx.buf.search`) are both implemented. The mechanism stays for
+-- any future component gated on a core addition.
+M._deferred = {}
 
 function M.deferred_reason(name)
   return M._deferred[name]
@@ -152,6 +153,20 @@ M.register("encoding", {
       return nil
     end
     return { text = enc }
+  end,
+})
+
+-- The line-ending style (`nx.bo.fileformat` → unix/dos/mac). `opts.symbols` maps each to a
+-- glyph/label; otherwise the bare name shows.
+M.register("fileformat", {
+  events = { "BufEnter", "BufReadPost", "BufWritePost" },
+  provide = function(ctx, opts)
+    local ff = nx.bo[ctx.buf].fileformat
+    if not ff or ff == "" then
+      return nil
+    end
+    local sym = opts and opts.symbols
+    return { text = (sym and sym[ff]) or ff }
   end,
 })
 
