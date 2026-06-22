@@ -132,4 +132,56 @@ nx.test.describe("nxvim-line.git", function()
     nx.test.expect(sl).to_contain("testbranch")
     nx.test.expect(sl).to_contain("+1")
   end)
+
+  nx.test.it("debounce collapses a burst of refreshes into one git run", function(t)
+    local dir = nx.test.tempdir()
+    local function g(...)
+      local r = nx.await(nx.run({ cmd = "git", args = { "-C", dir, ... } }))
+      if r.code ~= 0 then
+        error("git " .. table.concat({ ... }, " ") .. " failed: " .. r.stderr, 0)
+      end
+    end
+    g("init", "-q")
+    g("config", "user.email", "t@example.com")
+    g("config", "user.name", "Test")
+    nx.await(nx.fs.write(dir .. "/a.txt", "one\n"))
+    g("add", "a.txt")
+    g("commit", "-q", "-m", "init")
+    g("branch", "-m", "burstbranch")
+
+    line.setup({ options = { globalstatus = true }, sections = { lualine_b = { "branch" } } })
+    t:feed(":edit " .. dir .. "/a.txt<CR>")
+    -- let the first (immediate) fetch land so the cache is warm and nothing is inflight
+    t:wait_for(function()
+      return t:statusline():find("burstbranch")
+    end)
+
+    -- a burst of scheduled refreshes within the debounce window collapses to ONE fetch
+    local before = git._stats.runs
+    for _ = 1, 6 do
+      git.schedule(nx.buf.current())
+    end
+    t:wait_for(function()
+      return git._stats.runs > before
+    end)
+    nx.test.expect(git._stats.runs - before).to_be(1)
+  end)
+
+  nx.test.it("a non-repo buffer stays clean — no branch, no error", function(t)
+    local dir = nx.test.tempdir() -- not a git repo
+    nx.await(nx.fs.write(dir .. "/plain.txt", "hello\n"))
+    line.setup({ options = { globalstatus = true }, sections = { lualine_b = { "branch" } } })
+    t:feed(":edit " .. dir .. "/plain.txt<CR>")
+    -- the fetch completes and caches an empty result (no repo) without erroring
+    t:wait_for(function()
+      return git.get(nx.buf.current()) ~= nil
+    end)
+    nx.test.expect(git.get(nx.buf.current()).branch).to_be_nil()
+    -- and the branch component renders nothing
+    local cell = components.get("branch").provide({
+      buf = nx.buf.current(),
+      win = nx.win.current(),
+    })
+    nx.test.expect(cell).to_be_nil()
+  end)
 end)

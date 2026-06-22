@@ -33,7 +33,8 @@ require("nxvim-line").setup({
 > the `lualine_<section>_<mode>` groups, and the powerline section arrows — section A and
 > the edges recolour by mode via `ModeChanged`, no polling. Runtime behaviour is in too:
 > dim **inactive-window** statuslines (`inactive_sections`), per-component `cond`/`fmt`/
-> `on_click`, and the periodic `refresh` timer. Still to come: git polish (Phase 6),
+> `on_click`, and the periodic `refresh` timer. The async git source is debounced + bounded
+> with a `.git` watch (external commits/checkouts refresh the bar). Still to come:
 > extensions + tabline (Phase 7), docs (Phase 8). `fileformat` and `searchcount` are **deferred** —
 > they need editor primitives that don't exist yet, so naming them errors loud with the
 > reason.

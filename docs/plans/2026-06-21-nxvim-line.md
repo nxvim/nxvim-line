@@ -364,22 +364,32 @@ section) stays deferred — it errors loud (config.lua) rather than rendering. `
 `on_click` are the function-VALUED component options, which are supported; an inline
 function as the component *itself* is the separate feature still to come.
 
-## Phase 6 — Git polish (`git.lua`)
+## Phase 6 — Git polish (`git.lua`) ✅ (done)
 
 The async `git.lua` source **landed in Phase 2** (branch + per-file diff via `nx.run`,
-cached per directory, invalidating only the hosting segments; non-repo buffers show
-nothing). This phase is the remaining robustness:
+cached per file, invalidating only the hosting segments; non-repo buffers show nothing).
+This phase added the robustness — the "editor must never freeze" rule applied to a slow
+repo. **46 tests pass.**
 
-- **Debounce + staleness** — coalesce the per-`BufEnter`/`BufWritePost` refresh (today a
-  git run fires on every such event for the dir), and skip a run when the cache is fresh.
-- **Cancellation / bounding** — ensure a slow repo never piles up work (the "editor must
-  never freeze" rule); cap concurrent runs.
-- **A watch** — refresh on external changes to the repo (index/HEAD), not just editor
-  events.
-- Possibly **`--numstat`/`--shortstat`** as an alternative to the `-U0` hunk parse, and
-  richer comparisons (a rev, the index).
-- **Tests** extend `components_spec`'s git case: debounce collapses a burst; a non-repo
-  buffer stays clean.
+- **Debounce** ✅ — every event/watch trigger goes through `schedule(buf)`, a per-key
+  debounce (`debounce_ms = 120`): a burst of writes (or `.git` change events) restarts the
+  timer and collapses to a single git run. The cache-miss FIRST paint (`ensure`) still
+  runs immediately so the bar isn't blank, and skips when a debounced refresh is pending.
+- **Bounded runner** ✅ — at most `_max = 4` git fetches run at once; the rest queue
+  (deduped by key) and `pump` as slots free, so opening many buffers never spawns an
+  unbounded pile of `git` processes. A key already inflight is a no-op.
+- **A `.git` watch** ✅ — on a successful fetch, a **best-effort** (pcall'd, after the data
+  is published so it can never starve the invalidation) `nx.fs.watch` on the repo's
+  `--absolute-git-dir` is armed once per git-dir; an external HEAD/index change (commit,
+  checkout, stage) schedules a debounced refresh of the visible bar. Our own git reads
+  never write `.git`, so the watch can't self-trigger.
+- **Tests** (`components_spec`) ✅ — a burst of `schedule()` calls collapses to one
+  `git._stats.runs` increment; a non-repo buffer caches an empty result (nil branch) with
+  no error and the `branch` component renders nothing.
+
+**Honest scope:** `--numstat`/`--shortstat` and richer comparisons (a rev / the index) are
+left as future options — the `-U0` hunk parse is sufficient for working-tree-vs-HEAD, the
+one comparison the `diff` component exposes today.
 
 ## Phase 7 — Extensions, tabline
 
