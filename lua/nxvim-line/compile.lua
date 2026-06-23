@@ -257,12 +257,22 @@ local function render_section(ctx, opts)
   -- inactive and extension bars stay flat.
   local arrows = want_arrows
 
-  -- right half: the leading arrow transitions FROM this section's bg INTO the neighbour.
+  -- right half: the leading separator. A section bordering the central fill uses a
+  -- thin COMPONENT-style separator in the section's own (light) fg — the fill is
+  -- neutral (lualine_c), so a solid section arrow's colour transition there reads as
+  -- a mismatched block (and is invisible when the section shares the fill colour).
+  -- Inner section boundaries keep the solid powerline arrow.
   if arrows and opts.side == "right" then
-    cells[#cells + 1] = {
-      text = opts.sep_glyph,
-      hl = highlights.transition_group(opts.section, opts.sep_neighbor, mode),
-    }
+    if opts.sep_neighbor == FILL_SECTION then
+      if opts.component_sep ~= "" then
+        cells[#cells + 1] = { text = opts.component_sep, hl = section_hl }
+      end
+    else
+      cells[#cells + 1] = {
+        text = opts.sep_glyph,
+        hl = highlights.transition_group(opts.section, opts.sep_neighbor, mode),
+      }
+    end
   end
 
   for i, piece in ipairs(pieces) do

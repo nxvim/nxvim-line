@@ -94,6 +94,47 @@ nx.test.describe("nxvim-line.compile", function()
     end)
   end)
 
+  nx.test.it("the fill-bordering right separator is a thin component-style one", function(t)
+    -- The first right section borders the central (lualine_c) fill. Its leading
+    -- separator uses the thin COMPONENT glyph with the section's own (light) fg —
+    -- not the solid SECTION arrow whose colour transition is invisible/pointless
+    -- against the neutral fill. Inner section boundaries keep the solid arrow.
+    local compile = require("nxvim-line.compile")
+    local theme = {
+      normal = {
+        a = { fg = "#000000", bg = "#aa0000" },
+        b = { fg = "#000000", bg = "#00aa00" },
+        c = { fg = "#111111", bg = "#0000aa" },
+        x = { fg = "#cccccc", bg = "#222222" }, -- distinct section, light fg
+      },
+    }
+    line.setup({
+      options = {
+        globalstatus = true,
+        theme = theme,
+        section_separators = { left = "\u{e0b0}", right = "\u{e0b2}" },
+        component_separators = { left = "\u{e0b1}", right = "\u{e0b3}" },
+      },
+      sections = {
+        lualine_a = { "mode" },
+        lualine_x = { "mode" },
+        lualine_y = { "mode" },
+        lualine_z = { "mode" },
+      },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+    local x = compile._last["NxLineX"]
+    -- cell 1 is the leading (fill-bordering) separator
+    nx.test.expect(x[1].text).to_be("\u{e0b3}") -- thin component glyph, not solid "\u{e0b2}"
+    nx.test.expect(nx.hl.get(0, { name = x[1].hl }).fg).to_be(0xcccccc) -- light section fg
+    -- the inner Y separator still uses the solid section arrow
+    local y = compile._last["NxLineY"]
+    nx.test.expect(y[1].text).to_be("\u{e0b2}")
+  end)
+
   nx.test.it("shows MULTICURSOR in multi-cursor placement mode", function(t)
     line.setup({
       options = { globalstatus = true },
