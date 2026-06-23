@@ -29,6 +29,49 @@ nx.test.describe("nxvim-line.compile", function()
     nx.test.expect(sl).to_contain("1:1")
   end)
 
+  nx.test.it("edge sections' separators transition into the fill, not the inner neighbour", function(t)
+    -- The last LEFT section and the first RIGHT section border the central fill, so
+    -- their powerline arrows must transition to/from the fill section (c) — both ending
+    -- up the same fill colour. A regressed adjacency made the last left section point at
+    -- its inner neighbour (b) instead, so the fill colour disagreed with the right half
+    -- and the join rendered as a mismatched solid cell.
+    local compile = require("nxvim-line.compile")
+    local theme = {
+      normal = {
+        a = { fg = "#000000", bg = "#aa0000" },
+        b = { fg = "#000000", bg = "#00aa00" },
+        c = { fg = "#000000", bg = "#0000aa" }, -- the fill colour
+      },
+    }
+    line.setup({
+      options = { globalstatus = true, theme = theme },
+      sections = {
+        lualine_a = { "mode" },
+        lualine_b = { "mode" },
+        lualine_c = { "mode" },
+        lualine_x = { "mode" },
+        lualine_y = { "mode" },
+        lualine_z = { "mode" },
+      },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+    local function sep_bg(cell)
+      return cell and cell.hl and nx.hl.get(0, { name = cell.hl }).bg
+    end
+    -- last left section's trailing arrow = its LAST cell; first right section's leading
+    -- arrow = its FIRST cell. Both must carry the fill (c) background, 0x0000aa.
+    local left = compile._last["NxLineC"]
+    local right = compile._last["NxLineX"]
+    local left_sep_bg = sep_bg(left[#left])
+    local right_sep_bg = sep_bg(right[1])
+    nx.test.expect(left_sep_bg).to_be(0x0000aa)
+    nx.test.expect(right_sep_bg).to_be(0x0000aa)
+    nx.test.expect(left_sep_bg).to_be(right_sep_bg)
+  end)
+
   nx.test.it("reacts to a mode change via ModeChanged", function(t)
     line.setup({
       options = { globalstatus = true },
@@ -45,6 +88,30 @@ nx.test.describe("nxvim-line.compile", function()
     end)
     nx.test.expect(sl).to_contain("INSERT")
     -- back to normal so a later test starts in a known mode
+    t:feed("<Esc>")
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+  end)
+
+  nx.test.it("shows MULTICURSOR in multi-cursor placement mode", function(t)
+    line.setup({
+      options = { globalstatus = true },
+      sections = { lualine_a = { "mode" } },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+    -- `<A-c>` enters nxvim's multi-cursor placement mode, which reports mode() "m";
+    -- the mode component must label it MULTICURSOR (not fall back to NORMAL).
+    t:feed("<A-c>")
+    local sl = t:wait_for(function()
+      local s = t:statusline()
+      return s:find("MULTICURSOR") and s
+    end)
+    nx.test.expect(sl).to_contain("MULTICURSOR")
+    -- leave placement mode so a later test starts in a known mode
     t:feed("<Esc>")
     t:wait_for(function()
       return t:statusline():find("NORMAL")

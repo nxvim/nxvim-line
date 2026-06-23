@@ -81,6 +81,7 @@ local MODE_LABEL = {
   R = "REPLACE",
   c = "COMMAND",
   t = "TERMINAL",
+  m = "MULTICURSOR", -- nxvim's multi-cursor placement mode (mode() reports "m")
 }
 
 M.register("mode", {

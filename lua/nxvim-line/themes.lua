@@ -30,6 +30,10 @@ local MODE_OF = {
   R = "replace",
   c = "command",
   t = "terminal",
+  -- nxvim's multi-cursor placement mode. lualine themes have no multicursor
+  -- palette, so reuse `visual` (the closest multi-selection colour) — distinct
+  -- from normal, and defined by every theme.
+  m = "visual",
 }
 
 function M.mode_of(code)

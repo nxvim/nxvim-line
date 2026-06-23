@@ -438,7 +438,17 @@ local function build_side(config, keys, side, sep_glyph, component_sep, ctx, out
     local i = active_idx[sec]
     local neighbor = FILL_SECTION
     if i then
-      local adj = side == "left" and active[i + 1] or active[i - 1]
+      -- The adjacent active section: the NEXT for a left section, the PREVIOUS for a
+      -- right one. NOT the `cond and a or b` idiom — `active[i+1]` is nil for the last
+      -- left section (and `active[i-1]` for the first right one), and a nil "true" branch
+      -- makes that idiom fall through to the wrong side, so the edge section would adopt
+      -- its inner neighbour instead of the fill (a mismatched separator background).
+      local adj
+      if side == "left" then
+        adj = active[i + 1]
+      else
+        adj = active[i - 1]
+      end
       neighbor = adj and SECTION_LETTER[adj] or FILL_SECTION
     end
     build_section(config, sec, side, sep_glyph, component_sep, neighbor, ctx, out, git_segs)
@@ -625,7 +635,10 @@ function M.build(config)
   build_tabline(config)
 
   vim.o.laststatus = config.options.globalstatus and 3 or 2
-  nx.statusline.setup({ left = left, right = right })
+  -- `separator = ""` disables nx.statusline's own connector spaces: each section
+  -- already carries its padding + powerline arrows, so the native leading/inter/
+  -- trailing spaces would otherwise show as unstyled (white) gaps in the bar.
+  nx.statusline.setup({ left = left, right = right, separator = "" })
 
   M._active = {}
   for _, n in ipairs(left) do
