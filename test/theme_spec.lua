@@ -70,7 +70,7 @@ nx.test.describe("nxvim-line.theme", function()
     })
     nudge(t)
     t:wait_for(function()
-      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal") == 1
+      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal")
     end)
     nx.test.expect(nx.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0x112233)
     nx.test.expect(nx.hl.get(0, { name = "lualine_a_insert" }).bg).to_be(0x445566)
@@ -87,7 +87,7 @@ nx.test.describe("nxvim-line.theme", function()
     })
     nudge(t)
     t:wait_for(function()
-      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal") == 1
+      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal")
     end)
     nx.test.expect(nx.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0xabcabc)
     package.loaded["lualine.themes.nxlfake"] = nil
@@ -102,7 +102,7 @@ nx.test.describe("nxvim-line.theme", function()
     })
     nudge(t)
     t:wait_for(function()
-      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal") == 1
+      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal")
     end)
     -- section A's accent is derived from Function's fg
     nx.test.expect(nx.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0x5599ff)

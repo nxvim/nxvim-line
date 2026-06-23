@@ -53,7 +53,7 @@ nx.test.describe("nxvim-line.highlights", function()
     highlights.reset()
     local g = highlights.color_group({ fg = "#ff0000", gui = "bold" })
     nx.test.expect(g).to_be("NxLineColor1")
-    nx.test.expect(nx.hl.exists(g)).to_be(1) -- nx.hl.exists answers 1 / 0 (vim.fn.hlexists)
+    nx.test.expect(nx.hl.exists(g)).to_be(true) -- nx.hl.exists answers a boolean
     local def = nx.hl.get(0, { name = g })
     nx.test.expect(def.fg).to_be(0xff0000)
     nx.test.expect(def.bold).to_be(true)
