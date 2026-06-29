@@ -134,6 +134,7 @@ the component's text.
 | `label`       | static text (`{ "label", text = "…" }`)                     |
 | `searchcount` | `[idx/total]` of the last search (bounded `maxcount`)        |
 | `fileformat`  | unix / dos / mac (the line-ending style)                     |
+| `daemon`      | remote-daemon link status — connected green / reconnecting yellow / disconnected red (`nx.daemon.status()`); hidden on a local session |
 
 ## Themes
 

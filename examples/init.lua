@@ -24,7 +24,9 @@ nx.plugins({
           lualine_a = { "mode" },
           lualine_b = { "branch", "diff", "diagnostics" },
           lualine_c = { { "filename", path = 1 } },
-          lualine_x = { "encoding", "fileformat", "filetype" },
+          -- `daemon` shows the remote-link health on a `:connect` session (green/yellow/red);
+          -- it renders nothing on a local session, so it's safe to leave in always.
+          lualine_x = { "daemon", "encoding", "fileformat", "filetype" },
           lualine_y = { "progress" },
           lualine_z = { "location" },
         },

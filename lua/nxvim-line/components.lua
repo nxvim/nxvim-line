@@ -348,4 +348,48 @@ M.register("diff", {
   end,
 })
 
+-- ----- daemon ----------------------------------------------------------------
+
+-- Remote-daemon connection status (`nx.daemon.status()`), coloured per phase so a glance
+-- tells you the link's health: connected green, reconnecting yellow, disconnected red —
+-- the editor's existing Diagnostic{Ok,Warn,Error} groups (so a colorscheme override of
+-- those just applies). A local (non-daemon) session reports nil, and the component renders
+-- nothing, hiding itself. The server pushes the phase + fires `User DaemonStatusChanged`
+-- (the declared event) on every change, so the section re-renders the moment the link's
+-- state moves.
+local DAEMON = {
+  connected = { icon = "\u{f1e6}", label = "connected", hl = "DiagnosticOk" },
+  reconnecting = { icon = "\u{f021}", label = "reconnecting", hl = "DiagnosticWarn" },
+  disconnected = { icon = "\u{f127}", label = "disconnected", hl = "DiagnosticError" },
+}
+
+M.register("daemon", {
+  events = { "User DaemonStatusChanged" },
+  provide = function(_ctx, opts)
+    local status = nx.daemon and nx.daemon.status()
+    if not status then
+      return nil -- a local (non-daemon) session: nothing to show
+    end
+    local d = DAEMON[status]
+    if not d then
+      -- An unknown phase (forward-compat): show it plainly rather than crash or hide.
+      return { text = status, hl = "DiagnosticWarn" }
+    end
+    -- opts.label = false drops the word (icon only); a string overrides it; nil keeps the
+    -- default phase word.
+    local label = d.label
+    if opts and opts.label ~= nil then
+      label = opts.label or ""
+    end
+    local text = label
+    if icons.enabled() and d.icon ~= "" then
+      text = label == "" and d.icon or (d.icon .. " " .. label)
+    end
+    if text == "" then
+      return nil
+    end
+    return { text = text, hl = d.hl }
+  end,
+})
+
 return M

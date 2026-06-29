@@ -68,6 +68,50 @@ nx.test.describe("nxvim-line.components", function()
     local cell = components.get("lsp").provide({ buf = nx.buf.current(), win = nx.win.current() })
     nx.test.expect(cell).to_be_nil()
   end)
+
+  nx.test.it("daemon colours the connection phase and hides on a local session", function()
+    -- Pure: drive `nx.daemon.status()` through its mirror and assert the per-phase colour.
+    local daemon = components.get("daemon")
+    nx._daemon_status = nil
+    nx.test.expect(daemon.provide({})).to_be_nil() -- local session: nothing to show
+    nx._daemon_status = "connected"
+    local c = daemon.provide({})
+    nx.test.expect(c.hl).to_equal("DiagnosticOk") -- green
+    nx.test.expect(c.text:find("connected") ~= nil).to_equal(true)
+    nx._daemon_status = "reconnecting"
+    nx.test.expect(daemon.provide({}).hl).to_equal("DiagnosticWarn") -- yellow
+    nx._daemon_status = "disconnected"
+    nx.test.expect(daemon.provide({}).hl).to_equal("DiagnosticError") -- red
+    nx._daemon_status = nil
+  end)
+
+  nx.test.it("daemon status shows in the bar and refreshes on DaemonStatusChanged", function(t)
+    line.setup({
+      options = { globalstatus = true, icons_enabled = false },
+      sections = { lualine_x = { "daemon" } },
+    })
+    nudge(t)
+    -- The server mirrors the phase + fires `User DaemonStatusChanged`; the section's
+    -- declared event invalidates it, so the bar re-renders on the next tick.
+    nx._set_daemon_status("connected")
+    nudge(t)
+    nx.test
+      .expect(t:wait_for(function()
+        local s = t:statusline()
+        return s:find("connected") and s
+      end))
+      .to_contain("connected")
+    -- A status change re-renders via the same event (proving the live update path).
+    nx._set_daemon_status("disconnected")
+    nudge(t)
+    nx.test
+      .expect(t:wait_for(function()
+        local s = t:statusline()
+        return s:find("disconnected") and s
+      end))
+      .to_contain("disconnected")
+    nx._daemon_status = nil
+  end)
 end)
 
 nx.test.describe("nxvim-line.git", function()
