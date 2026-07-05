@@ -104,6 +104,39 @@ nx.test.describe("nxvim-line.themes (pure)", function()
 end)
 
 nx.test.describe("nxvim-line.theme", function()
+  nx.test.it(
+    "re-applies the theme on ColorScheme (colorscheme loads/switches after setup)",
+    function(t)
+      -- The colorscheme may load AFTER setup, or the user switches flavours live; the
+      -- bar must re-derive on ColorScheme (real lualine does). Start on synthesis…
+      vim.g.colors_name = "no-shipped-theme-x"
+      nx.hl.define(0, "Normal", { fg = "#cccccc", bg = "#101010" })
+      nx.hl.define(0, "StatusLine", { fg = "#cccccc", bg = "#202020" })
+      line.setup({
+        options = { globalstatus = true, theme = "auto" },
+        sections = { lualine_a = { "mode" } },
+      })
+      nudge(t)
+      t:wait_for(function()
+        return nx.hl.exists("lualine_c_normal")
+      end)
+      nx.test.expect(nx.hl.get(0, { name = "lualine_c_normal" }).bg).to_be(0x202020) -- synthesized fill
+
+      -- …then a colorscheme with a shipped lualine theme becomes active. Firing
+      -- ColorScheme must re-derive and re-apply so the bar follows it.
+      package.loaded["lualine.themes.shipped-x"] = {
+        normal = { a = { fg = "#000000", bg = "#89b4fa" }, c = { fg = "#cdd6f4", bg = "#181825" } },
+      }
+      vim.g.colors_name = "shipped-x"
+      nx.autocmd.exec("ColorScheme", {})
+      t:wait_for(function()
+        return nx.hl.get(0, { name = "lualine_c_normal" }).bg == 0x181825
+      end)
+      nx.test.expect(nx.hl.get(0, { name = "lualine_c_normal" }).bg).to_be(0x181825)
+      package.loaded["lualine.themes.shipped-x"] = nil
+    end
+  )
+
   nx.test.it("a theme table colours the sections under lualine_<sec>_<mode> names", function(t)
     line.setup({
       options = {

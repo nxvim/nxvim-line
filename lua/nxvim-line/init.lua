@@ -43,6 +43,18 @@ M.config = nil
 function M.setup(opts)
   M.config = config.merge(config.defaults(), opts)
   compile.build(M.config)
+  -- Re-derive and re-apply the theme whenever the colorscheme changes — like real
+  -- lualine. This matters for two reasons: the colorscheme may load AFTER us (so a
+  -- `theme = "auto"` resolve at setup saw no `colors_name` yet and fell back to the
+  -- synthesized palette), and the user can switch it live (`:colorscheme
+  -- catppuccin-latte`). Wired once, even across repeated setup() calls.
+  if not M._colorscheme_au then
+    M._colorscheme_au = nx.on("ColorScheme", {}, function()
+      if M.config then
+        compile.build(M.config)
+      end
+    end)
+  end
   return M
 end
 
