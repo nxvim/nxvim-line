@@ -121,10 +121,23 @@ local function hex(v, fallback)
   return fallback
 end
 
--- derive_auto(): read a handful of canonical groups and assemble a powerline palette —
--- the section-a accent per mode comes from a semantic group (Function/String/…), b/c from
--- StatusLine/Normal. Every read has a fallback so this never yields a nil cell.
+-- derive_auto(): the palette for `theme = "auto"`.
+--
+-- Faithful to real lualine's `auto`: FIRST try to load a lualine theme shipped for
+-- the active colorscheme (`vim.g.colors_name`) — a colorscheme like catppuccin sets
+-- `colors_name = "catppuccin-mocha"` and ships `lualine/themes/catppuccin-mocha.lua`,
+-- a hand-tuned palette that reads far better than anything synthesized. Only when no
+-- such theme exists do we synthesize a powerline palette from the canonical highlight
+-- groups (section-a accent per mode from a semantic group, b/c from StatusLine/Normal).
 function M.derive_auto()
+  local name = vim.g.colors_name
+  if type(name) == "string" and name ~= "" then
+    local ok, theme = pcall(require, "lualine.themes." .. name)
+    if ok and type(theme) == "table" then
+      return theme
+    end
+  end
+
   local normal, statusline = hl("Normal"), hl("StatusLine")
   local statuslinenc = hl("StatusLineNC")
   local bg = hex(normal.bg, "#1c1c1c")

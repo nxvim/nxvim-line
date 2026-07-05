@@ -60,6 +60,7 @@ nx.test.describe("nxvim-line.themes (pure)", function()
   -- (e.g. catppuccin's mantle vs base). `x` defaults to `c`, so the whole right
   -- half of the active bar follows.
   nx.test.it("auto's fill (c) and inactive sections ride the StatusLine bg, not Normal", function()
+    vim.g.colors_name = "no-lualine-theme-here" -- force the synthesis fallback path
     nx.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" }) -- the document bg
     nx.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- a darker bar bg
     local pal = themes.derive_auto()
@@ -68,7 +69,29 @@ nx.test.describe("nxvim-line.themes (pure)", function()
     nx.test.expect(pal.inactive.c.bg).to_be("#181825")
   end)
 
+  nx.test.it("auto prefers the active colorscheme's shipped lualine theme", function()
+    -- Real lualine's `auto` loads `lualine.themes.<colors_name>` when it exists
+    -- (e.g. catppuccin ships catppuccin-mocha) rather than synthesizing. Simulate a
+    -- shipped theme via package.loaded and point colors_name at it.
+    local shipped = {
+      normal = { a = { fg = "#000000", bg = "#89b4fa" }, c = { fg = "#cdd6f4", bg = "#181825" } },
+      inactive = { c = { fg = "#6c7086", bg = "#181825" } },
+    }
+    package.loaded["lualine.themes.faketheme"] = shipped
+    local prev = vim.g.colors_name
+    vim.g.colors_name = "faketheme"
+    -- Even with distinct highlight groups present, the shipped theme wins.
+    nx.hl.define(0, "Normal", { fg = "#ffffff", bg = "#111111" })
+    nx.hl.define(0, "StatusLine", { fg = "#ffffff", bg = "#222222" })
+    local pal = themes.derive_auto()
+    nx.test.expect(pal.normal.a.bg).to_be("#89b4fa")
+    nx.test.expect(pal.normal.c.bg).to_be("#181825")
+    package.loaded["lualine.themes.faketheme"] = nil
+    vim.g.colors_name = prev
+  end)
+
   nx.test.it("auto's inactive bar uses StatusLineNC's faded foreground", function()
+    vim.g.colors_name = "no-lualine-theme-here" -- force the synthesis fallback path
     nx.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" })
     nx.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- active: bright text
     nx.hl.define(0, "StatusLineNC", { fg = "#45475a", bg = "#181825" }) -- inactive: faded text
