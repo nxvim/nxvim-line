@@ -67,6 +67,17 @@ nx.test.describe("nxvim-line.themes (pure)", function()
     nx.test.expect(pal.inactive.b.bg).to_be("#181825")
     nx.test.expect(pal.inactive.c.bg).to_be("#181825")
   end)
+
+  nx.test.it("auto's inactive bar uses StatusLineNC's faded foreground", function()
+    nx.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" })
+    nx.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- active: bright text
+    nx.hl.define(0, "StatusLineNC", { fg = "#45475a", bg = "#181825" }) -- inactive: faded text
+    local pal = themes.derive_auto()
+    -- The inactive text is the dimmer StatusLineNC fg, not the active StatusLine fg.
+    nx.test.expect(pal.inactive.c.fg).to_be("#45475a")
+    nx.test.expect(pal.inactive.a.fg).to_be("#45475a")
+    nx.test.expect(pal.normal.c.fg).to_be("#cdd6f4")
+  end)
 end)
 
 nx.test.describe("nxvim-line.theme", function()

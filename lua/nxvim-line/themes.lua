@@ -126,10 +126,16 @@ end
 -- StatusLine/Normal. Every read has a fallback so this never yields a nil cell.
 function M.derive_auto()
   local normal, statusline = hl("Normal"), hl("StatusLine")
+  local statuslinenc = hl("StatusLineNC")
   local bg = hex(normal.bg, "#1c1c1c")
   local fg = hex(normal.fg, "#c6c6c6")
   local sl_bg = hex(statusline.bg, "#3a3a3a")
   local sl_fg = hex(statusline.fg, fg)
+  -- The unfocused-window bar rides StatusLineNC: a dimmer foreground (neovim fades
+  -- the inactive statusline text) over the same darker background. Fall back to a
+  -- muted grey / the active bar bg when the colorscheme leaves NC undefined.
+  local nc_fg = hex(statuslinenc.fg, "#888888")
+  local nc_bg = hex(statuslinenc.bg, sl_bg)
   local function accent(group, fallback)
     return hex(hl(group).fg, fallback)
   end
@@ -150,12 +156,13 @@ function M.derive_auto()
     replace = { a = a(accent("Error", "#ff5f5f")) },
     command = { a = a(accent("Constant", "#ffaf00")) },
     terminal = { a = a(accent("Type", "#5fd7af")) },
-    -- The inactive (unfocused-window) bar is flat but still on the StatusLine
-    -- background, so it too stays distinct from the document.
+    -- The inactive (unfocused-window) bar is flat, on the StatusLineNC background,
+    -- with a FADED foreground — matching neovim, where the inactive statusline text
+    -- is dimmed rather than shown at full brightness.
     inactive = {
-      a = { fg = sl_fg, bg = sl_bg },
-      b = { fg = sl_fg, bg = sl_bg },
-      c = { fg = sl_fg, bg = sl_bg },
+      a = { fg = nc_fg, bg = nc_bg },
+      b = { fg = nc_fg, bg = nc_bg },
+      c = { fg = nc_fg, bg = nc_bg },
     },
   }
 end
