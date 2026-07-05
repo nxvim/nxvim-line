@@ -54,6 +54,19 @@ nx.test.describe("nxvim-line.themes (pure)", function()
       end)
       .to_error("unknown theme")
   end)
+
+  -- Regression: the auto palette's fill (c) and inactive sections must ride the
+  -- StatusLine background, NOT Normal — otherwise the bar blends into the document
+  -- (e.g. catppuccin's mantle vs base). `x` defaults to `c`, so the whole right
+  -- half of the active bar follows.
+  nx.test.it("auto's fill (c) and inactive sections ride the StatusLine bg, not Normal", function()
+    nx.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" }) -- the document bg
+    nx.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- a darker bar bg
+    local pal = themes.derive_auto()
+    nx.test.expect(pal.normal.c.bg).to_be("#181825")
+    nx.test.expect(pal.inactive.b.bg).to_be("#181825")
+    nx.test.expect(pal.inactive.c.bg).to_be("#181825")
+  end)
 end)
 
 nx.test.describe("nxvim-line.theme", function()

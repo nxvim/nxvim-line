@@ -140,17 +140,22 @@ function M.derive_auto()
     normal = {
       a = a(accent("Function", "#5fafff")),
       b = { fg = fg, bg = sl_bg },
-      c = { fg = sl_fg, bg = bg },
+      -- The fill (c) — and every section defaulting to it (x) — rides the
+      -- StatusLine background, NOT Normal, so the bar reads as a distinct strip
+      -- rather than blending into the document (e.g. catppuccin's mantle vs base).
+      c = { fg = sl_fg, bg = sl_bg },
     },
     insert = { a = a(accent("String", "#5faf5f")) },
     visual = { a = a(accent("Statement", "#d787d7")) },
     replace = { a = a(accent("Error", "#ff5f5f")) },
     command = { a = a(accent("Constant", "#ffaf00")) },
     terminal = { a = a(accent("Type", "#5fd7af")) },
+    -- The inactive (unfocused-window) bar is flat but still on the StatusLine
+    -- background, so it too stays distinct from the document.
     inactive = {
       a = { fg = sl_fg, bg = sl_bg },
-      b = { fg = sl_fg, bg = bg },
-      c = { fg = sl_fg, bg = bg },
+      b = { fg = sl_fg, bg = sl_bg },
+      c = { fg = sl_fg, bg = sl_bg },
     },
   }
 end
