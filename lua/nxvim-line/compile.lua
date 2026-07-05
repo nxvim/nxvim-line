@@ -218,6 +218,39 @@ local function pick_layout(ctx, opts, focused)
   return comps, focused and opts.sep_glyph ~= ""
 end
 
+-- Would this section render any visible cell for `ctx`? Used to resolve a powerline
+-- arrow's *effective* neighbour at render time: a neighbour that collapses to nothing
+-- (an empty git branch, no diagnostics) must be skipped so the arrow transitions into the
+-- first section that actually has content — or the fill — rather than carrying the empty
+-- section's background over a gap. Cheap: the neighbour's `provide`s are cache-backed
+-- (git.get after a one-shot ensure, a diagnostics count), so re-running them here is fine.
+local function section_renders(ctx, opts)
+  local comps = pick_layout(ctx, opts, ctx.focused)
+  if not comps or #comps == 0 then
+    return false
+  end
+  for _, comp in ipairs(comps) do
+    if #component_cells(comp, ctx) > 0 then
+      return true
+    end
+  end
+  return false
+end
+
+-- The section letter a section's powerline arrow should transition into for `ctx`: the
+-- first neighbour (in adjacency order — outward from the centre) that actually renders,
+-- else the fill. `opts.neighbor_chain = { { letter, opts }, … }` is the ordered run of
+-- ACTIVE neighbours build_side wired up; walking it per frame is what makes the mode
+-- block's `>` take the git-branch bg when the branch shows and the fill bg when it doesn't.
+local function effective_neighbor(ctx, opts)
+  for _, nb in ipairs(opts.neighbor_chain or {}) do
+    if section_renders(ctx, nb.opts) then
+      return nb.letter
+    end
+  end
+  return FILL_SECTION
+end
+
 -- Render one section into a flat cell list, picking the layout (disabled / extension /
 -- base) and colouring by FOCUS: a focused window renders in its mode group with the
 -- powerline arrows; an unfocused window renders flat in `lualine_<section>_inactive`. Every
@@ -263,14 +296,15 @@ local function render_section(ctx, opts)
   -- a mismatched block (and is invisible when the section shares the fill colour).
   -- Inner section boundaries keep the solid powerline arrow.
   if arrows and opts.side == "right" then
-    if opts.sep_neighbor == FILL_SECTION then
+    local neighbor = effective_neighbor(ctx, opts)
+    if neighbor == FILL_SECTION then
       if opts.component_sep ~= "" then
         cells[#cells + 1] = { text = opts.component_sep, hl = section_hl }
       end
     else
       cells[#cells + 1] = {
         text = opts.sep_glyph,
-        hl = highlights.transition_group(opts.section, opts.sep_neighbor, mode),
+        hl = highlights.transition_group(opts.section, neighbor, mode),
       }
     end
   end
@@ -290,11 +324,13 @@ local function render_section(ctx, opts)
     end
   end
 
-  -- left half: the trailing arrow transitions FROM this section's bg INTO the neighbour.
+  -- left half: the trailing arrow transitions FROM this section's bg INTO the neighbour —
+  -- the first one that actually renders (an empty git-branch section is skipped so the
+  -- arrow reaches the fill instead of stranding the branch bg over a collapsed section).
   if arrows and opts.side == "left" then
     cells[#cells + 1] = {
       text = opts.sep_glyph,
-      hl = highlights.transition_group(opts.section, opts.sep_neighbor, mode),
+      hl = highlights.transition_group(opts.section, effective_neighbor(ctx, opts), mode),
     }
   end
   return cells
@@ -378,9 +414,13 @@ local function any_present(config, keys, exts)
   return out
 end
 
--- Register one section's segment, capturing its active/inactive component lists and the
--- per-extension overrides. `neighbor` is the letter the focused arrow transitions into.
-local function build_section(cfg, sec, side, sep_glyph, component_sep, neighbor, ctx, out, git_segs)
+-- Build (but don't yet register) one section's render opts + metadata. `neighbor_chain`
+-- is left empty here and wired by build_side once every section on the half exists — a
+-- section's effective arrow neighbour is resolved at render time against the CHAIN of its
+-- active neighbours, so we need them all built first. Returns
+-- `{ sec, segname, opts, both, has_git }` (`both` is the component union the section's
+-- event/git wiring is computed over).
+local function make_section(cfg, sec, side, sep_glyph, component_sep, ctx)
   local active_comps = cfg.sections[sec] or {}
   local inactive_comps = cfg.inactive_sections[sec] or {}
   local both = {} -- the union the section's event/git wiring is computed over
@@ -402,7 +442,6 @@ local function build_section(cfg, sec, side, sep_glyph, component_sep, neighbor,
     add_all(e.inactive_sections[sec])
   end
 
-  local segname = SECTION_SEGMENT[sec]
   local opts = {
     section = SECTION_LETTER[sec],
     side = side,
@@ -413,11 +452,27 @@ local function build_section(cfg, sec, side, sep_glyph, component_sep, neighbor,
     component_sep = component_sep,
     padding = DEFAULT_PADDING,
     sep_glyph = sep_glyph,
-    sep_neighbor = neighbor,
+    neighbor_chain = {}, -- wired by build_side
   }
+  return {
+    sec = sec,
+    segname = SECTION_SEGMENT[sec],
+    opts = opts,
+    both = both,
+    has_git = has_git(both),
+  }
+end
+
+-- Register a built section as an nx.statusline segment. `events_both` is the component
+-- union whose events invalidate it — this section's own components PLUS its neighbour
+-- chain's (so the mode block re-renders when the git branch appears/disappears, moving
+-- its arrow's target). `is_git` folds in a neighbour's git dependence so a git data update
+-- invalidates this section too, not only the section the branch text lives in.
+local function register_section(b, events_both, is_git, out, git_segs)
+  local segname, opts = b.segname, b.opts
   nx.statusline.segment({
     name = segname,
-    events = union_events(both),
+    events = union_events(events_both),
     render = function(rctx)
       local cells = render_section(rctx, opts)
       M._last[segname] = cells
@@ -427,15 +482,18 @@ local function build_section(cfg, sec, side, sep_glyph, component_sep, neighbor,
     end,
   })
   out[#out + 1] = segname
-  if has_git(both) then
+  if is_git then
     git_segs[#git_segs + 1] = segname
   end
 end
 
 -- Build one half's segments with powerline adjacency. Left sections arrow INTO the next
 -- ACTIVE-present section (or the fill); right sections arrow into the PREVIOUS one (or the
--- fill), so the chevrons point outward from the centre. Adjacency is over the active base
--- layout (the only one that draws arrows). `ctx = { exts, disabled }`.
+-- fill), so the chevrons point outward from the centre. The neighbour is resolved at RENDER
+-- time from the ordered chain of adjacent active sections, so an empty one (no git branch,
+-- no diagnostics) is skipped and the arrow reaches the first non-empty section — or the
+-- fill — with no stranded background. Adjacency is over the active base layout (the only
+-- one that draws arrows). `ctx = { exts, disabled }`.
 local function build_side(config, keys, side, sep_glyph, component_sep, ctx, out, git_segs)
   local segs = any_present(config, keys, ctx.exts)
   local active = active_present(config, keys)
@@ -444,24 +502,43 @@ local function build_side(config, keys, side, sep_glyph, component_sep, ctx, out
   for i, sec in ipairs(active) do
     active_idx[sec] = i
   end
+
+  -- Pass 1: build every registered section's opts (needed as neighbour chain entries).
+  local built = {}
   for _, sec in ipairs(segs) do
+    built[sec] = make_section(config, sec, side, sep_glyph, component_sep, ctx)
+  end
+
+  -- Pass 2: wire each section's neighbour chain (the run of active sections OUTWARD from
+  -- it — the following ones for a left section, the preceding ones for a right one), fold
+  -- the chain's events/git dependence into the section, then register it in layout order.
+  for _, sec in ipairs(segs) do
+    local b = built[sec]
     local i = active_idx[sec]
-    local neighbor = FILL_SECTION
-    if i then
-      -- The adjacent active section: the NEXT for a left section, the PREVIOUS for a
-      -- right one. NOT the `cond and a or b` idiom — `active[i+1]` is nil for the last
-      -- left section (and `active[i-1]` for the first right one), and a nil "true" branch
-      -- makes that idiom fall through to the wrong side, so the edge section would adopt
-      -- its inner neighbour instead of the fill (a mismatched separator background).
-      local adj
-      if side == "left" then
-        adj = active[i + 1]
-      else
-        adj = active[i - 1]
-      end
-      neighbor = adj and SECTION_LETTER[adj] or FILL_SECTION
+    local events_both = {}
+    for _, c in ipairs(b.both) do
+      events_both[#events_both + 1] = c
     end
-    build_section(config, sec, side, sep_glyph, component_sep, neighbor, ctx, out, git_segs)
+    local is_git = b.has_git
+    if i then
+      local chain = {}
+      -- NOT the `cond and a or b` idiom — the outward step lands past the array end for an
+      -- edge section, and a nil "true" branch would fall through to the wrong side.
+      local step = side == "left" and 1 or -1
+      local j = i + step
+      while active[j] do
+        local nsec = active[j]
+        local nb = built[nsec]
+        chain[#chain + 1] = { letter = SECTION_LETTER[nsec], opts = nb.opts }
+        for _, c in ipairs(nb.both) do
+          events_both[#events_both + 1] = c
+        end
+        is_git = is_git or nb.has_git
+        j = j + step
+      end
+      b.opts.neighbor_chain = chain
+    end
+    register_section(b, events_both, is_git, out, git_segs)
   end
 end
 

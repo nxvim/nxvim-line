@@ -29,48 +29,51 @@ nx.test.describe("nxvim-line.compile", function()
     nx.test.expect(sl).to_contain("1:1")
   end)
 
-  nx.test.it("edge sections' separators transition into the fill, not the inner neighbour", function(t)
-    -- The last LEFT section and the first RIGHT section border the central fill, so
-    -- their powerline arrows must transition to/from the fill section (c) — both ending
-    -- up the same fill colour. A regressed adjacency made the last left section point at
-    -- its inner neighbour (b) instead, so the fill colour disagreed with the right half
-    -- and the join rendered as a mismatched solid cell.
-    local compile = require("nxvim-line.compile")
-    local theme = {
-      normal = {
-        a = { fg = "#000000", bg = "#aa0000" },
-        b = { fg = "#000000", bg = "#00aa00" },
-        c = { fg = "#000000", bg = "#0000aa" }, -- the fill colour
-      },
-    }
-    line.setup({
-      options = { globalstatus = true, theme = theme },
-      sections = {
-        lualine_a = { "mode" },
-        lualine_b = { "mode" },
-        lualine_c = { "mode" },
-        lualine_x = { "mode" },
-        lualine_y = { "mode" },
-        lualine_z = { "mode" },
-      },
-    })
-    nudge(t)
-    t:wait_for(function()
-      return t:statusline():find("NORMAL")
-    end)
-    local function sep_bg(cell)
-      return cell and cell.hl and nx.hl.get(0, { name = cell.hl }).bg
+  nx.test.it(
+    "edge sections' separators transition into the fill, not the inner neighbour",
+    function(t)
+      -- The last LEFT section and the first RIGHT section border the central fill, so
+      -- their powerline arrows must transition to/from the fill section (c) — both ending
+      -- up the same fill colour. A regressed adjacency made the last left section point at
+      -- its inner neighbour (b) instead, so the fill colour disagreed with the right half
+      -- and the join rendered as a mismatched solid cell.
+      local compile = require("nxvim-line.compile")
+      local theme = {
+        normal = {
+          a = { fg = "#000000", bg = "#aa0000" },
+          b = { fg = "#000000", bg = "#00aa00" },
+          c = { fg = "#000000", bg = "#0000aa" }, -- the fill colour
+        },
+      }
+      line.setup({
+        options = { globalstatus = true, theme = theme },
+        sections = {
+          lualine_a = { "mode" },
+          lualine_b = { "mode" },
+          lualine_c = { "mode" },
+          lualine_x = { "mode" },
+          lualine_y = { "mode" },
+          lualine_z = { "mode" },
+        },
+      })
+      nudge(t)
+      t:wait_for(function()
+        return t:statusline():find("NORMAL")
+      end)
+      local function sep_bg(cell)
+        return cell and cell.hl and nx.hl.get(0, { name = cell.hl }).bg
+      end
+      -- last left section's trailing arrow = its LAST cell; first right section's leading
+      -- arrow = its FIRST cell. Both must carry the fill (c) background, 0x0000aa.
+      local left = compile._last["NxLineC"]
+      local right = compile._last["NxLineX"]
+      local left_sep_bg = sep_bg(left[#left])
+      local right_sep_bg = sep_bg(right[1])
+      nx.test.expect(left_sep_bg).to_be(0x0000aa)
+      nx.test.expect(right_sep_bg).to_be(0x0000aa)
+      nx.test.expect(left_sep_bg).to_be(right_sep_bg)
     end
-    -- last left section's trailing arrow = its LAST cell; first right section's leading
-    -- arrow = its FIRST cell. Both must carry the fill (c) background, 0x0000aa.
-    local left = compile._last["NxLineC"]
-    local right = compile._last["NxLineX"]
-    local left_sep_bg = sep_bg(left[#left])
-    local right_sep_bg = sep_bg(right[1])
-    nx.test.expect(left_sep_bg).to_be(0x0000aa)
-    nx.test.expect(right_sep_bg).to_be(0x0000aa)
-    nx.test.expect(left_sep_bg).to_be(right_sep_bg)
-  end)
+  )
 
   nx.test.it("reacts to a mode change via ModeChanged", function(t)
     line.setup({
@@ -133,6 +136,73 @@ nx.test.describe("nxvim-line.compile", function()
     -- the inner Y separator still uses the solid section arrow
     local y = compile._last["NxLineY"]
     nx.test.expect(y[1].text).to_be("\u{e0b2}")
+  end)
+
+  nx.test.it("the mode arrow skips an empty neighbour and reaches the fill bg", function(t)
+    -- The mode block (a) arrows into section b. When b renders NOTHING (an empty git
+    -- branch), its arrow must NOT keep b's background over the collapsed section — it must
+    -- transition into the first section that actually renders (here filename, c), whose bg
+    -- IS the fill. A regression here leaves a mismatched green chevron floating before the
+    -- dark fill.
+    local compile = require("nxvim-line.compile")
+    local theme = {
+      normal = {
+        a = { fg = "#000000", bg = "#aa0000" },
+        b = { fg = "#000000", bg = "#00aa00" }, -- the git/branch section bg (distinct)
+        c = { fg = "#000000", bg = "#0000aa" }, -- the fill colour
+      },
+    }
+    line.setup({
+      options = { globalstatus = true, theme = theme },
+      sections = {
+        lualine_a = { "mode" },
+        lualine_b = {
+          function()
+            return nil
+          end,
+        }, -- renders nothing (no branch)
+        lualine_c = { "filename" },
+      },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+    local a = compile._last["NxLineA"]
+    local arrow_bg = nx.hl.get(0, { name = a[#a].hl }).bg
+    nx.test.expect(arrow_bg).to_be(0x0000aa) -- fill (c), NOT 0x00aa00 (the empty b)
+  end)
+
+  nx.test.it("the mode arrow takes the neighbour's bg when the neighbour renders", function(t)
+    -- Same layout, but now b renders (the branch shows): the mode arrow must transition
+    -- into b's (green) background, distinct from the fill.
+    local compile = require("nxvim-line.compile")
+    local theme = {
+      normal = {
+        a = { fg = "#000000", bg = "#aa0000" },
+        b = { fg = "#000000", bg = "#00aa00" },
+        c = { fg = "#000000", bg = "#0000aa" },
+      },
+    }
+    line.setup({
+      options = { globalstatus = true, theme = theme },
+      sections = {
+        lualine_a = { "mode" },
+        lualine_b = {
+          function()
+            return "main"
+          end,
+        }, -- renders (branch shown)
+        lualine_c = { "filename" },
+      },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+    local a = compile._last["NxLineA"]
+    local arrow_bg = nx.hl.get(0, { name = a[#a].hl }).bg
+    nx.test.expect(arrow_bg).to_be(0x00aa00) -- section b bg
   end)
 
   nx.test.it("shows MULTICURSOR in multi-cursor placement mode", function(t)
