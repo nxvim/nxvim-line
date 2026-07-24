@@ -4,8 +4,8 @@ A fully-featured, **lualine-style** statusline for [nxvim](https://github.com/da
 
 Configure it the way you'd configure `lualine.nvim` — sections `a`–`z`, a rich component
 library (mode, branch, diff, diagnostics, filename, filetype + icons, fileformat,
-encoding, progress, location, LSP), themes that recolour by mode, and powerline
-separators:
+encoding, progress, location, LSP, searchcount, daemon), themes that recolour by mode, and
+powerline separators:
 
 ```lua
 require("nxvim-line").setup({
@@ -21,40 +21,16 @@ require("nxvim-line").setup({
 })
 ```
 
-> **Status: complete — all phases landed** ([plan](docs/plans/2026-06-21-nxvim-line.md)).
-> `setup()` works: the config model + the lualine→`nx.statusline` compiler, and the component
-> library — `mode`, `branch`, `diff`, `diagnostics`, `filename` (path modes + `[+]`/`[-]`
-> flags), `filetype`, `encoding`, `lsp`, `progress`, `location`. `diff`/`diagnostics`
-> already colour with the editor's `Diff*`/`Diagnostic*` groups; `branch`/`diff` are
-> driven by an async `git` source. The lualine **look** is in: Nerd-Font icons
-> (`icons_enabled`, `register_icons`, an `icon_provider` hook), component separators, and
-> per-component `color`/`padding`. And the **signature mode-reactive colour**: themes
-> (`theme = "auto"` derives from the colorscheme, a name, or a table; `register_theme`),
-> the `lualine_<section>_<mode>` groups, and the powerline section arrows — section A and
-> the edges recolour by mode via `ModeChanged`, no polling. Runtime behaviour is in too:
-> dim **inactive-window** statuslines (`inactive_sections`), per-component `cond`/`fmt`/
-> `on_click`, and the periodic `refresh` timer. The async git source is debounced + bounded
-> with a `.git` watch (external commits/checkouts refresh the bar). Per-filetype
-> `extensions` (bundled `nxvim-tree`/`quickfix` + custom), `disabled_filetypes`, and a
-> `tabline` lowered onto the `%`-format engine round out the surface. Inline-function
-> components, `searchcount`, and `fileformat` are all implemented (the last on a new core
-> `'fileformat'` option); only winbar stays out of scope (a separate core feature). Full
-> manual: `:help nxvim-line`.
-
-## How it works
-
 nxvim-line is a **compiler, not a renderer**. The editor already owns statusline
-rendering through the native `nx.statusline` segment registry: built-in segments
-(`mode`, `location`, `diagnostics`, …) resolve in Rust every frame, and custom Lua
-segments run their `render` **only when invalidated** by a declared event — never per
-frame (ADR 0002). nxvim-line takes the lualine-shaped config and **lowers** it onto that
-primitive: it registers one custom segment per section, defines the highlight groups for
-the theme, and wires each component's invalidation events. The hot path stays in Rust;
-your config stays familiar.
+rendering through the native `nx.statusline` segment registry — built-in segments resolve
+in Rust every frame, and custom Lua segments run only when invalidated by a declared event,
+never per frame (ADR 0002). nxvim-line **lowers** a lualine-shaped config onto that
+primitive: one custom segment per section, the theme's highlight groups, and each
+component's invalidation events. The hot path stays in Rust; your config stays familiar.
 
 ## Install
 
-Declare it with the built-in `:Plugins` manager in your `init.lua`:
+Declare it with the built-in `:Plugins` manager, then `:PluginSync`:
 
 ```lua
 nx.plugins({
@@ -67,134 +43,27 @@ nx.plugins({
 })
 ```
 
-Then run `:PluginSync` to clone it.
+## Documentation
 
-## Configuration
+Full docs — `setup()`, every option, the section model, the component library and
+per-component options, themes, highlight groups, extensions, the tabline, the `register_*`
+API, and writing a custom component — live in the help file. The same source renders both
+on GitHub and in the editor:
 
-The config mirrors lualine's shape:
+- In editor: `:help nxvim-line`
+- On GitHub: [doc/nxvim-line.md](./doc/nxvim-line.md) (the help source)
 
-```lua
-require("nxvim-line").setup({
-  options = {
-    theme = "auto",                          -- name | table | "auto" (derive from colorscheme)
-    globalstatus = false,                    -- one bottom bar (laststatus = 3)
-    icons_enabled = true,                    -- Nerd-Font glyphs (false → plain text)
-    section_separators = { left = "", right = "" },     -- powerline arrows (Phase 4)
-    component_separators = { left = "", right = "" },   -- between components in a section
-    disabled_filetypes = { statusline = { "nxvim-tree" } },
-    refresh = { statusline = 1000 },         -- ms; time-varying sections
-  },
-  sections = {
-    lualine_a = { "mode" },
-    lualine_b = { "branch", "diff", "diagnostics" },
-    lualine_c = { "filename" },
-    lualine_x = { "encoding", "fileformat", "filetype" },
-    lualine_y = { "progress" },
-    lualine_z = { "location" },
-  },
-  inactive_sections = { lualine_c = { "filename" }, lualine_x = { "location" } },
-  extensions = { "nxvim-tree", "quickfix" },
-})
-```
+## Development
 
-A component is a string or a table with per-component options (the lualine spelling):
-
-```lua
-sections = {
-  lualine_c = {
-    { "filename", path = 1, icon = "" },          -- relative path + an icon
-    { "diagnostics", sources = { "nvim_lsp" } },
-  },
-  lualine_x = {
-    { "filetype" },
-    { "location", cond = function() return true end },
-  },
-}
-```
-
-Every component table accepts `icon`, `color`, `padding`, `cond`, `fmt`, and
-`on_click`, plus component-specific keys. An inline `function` _as_ a component is also
-supported (lualine's spelling) — `{ function() return "…" end, color = … }` — returning
-the component's text.
-
-## Components
-
-| Component     | Shows                                                        |
-| ------------- | ----------------------------------------------------------- |
-| `mode`        | the current mode (and drives the mode-reactive theme colour) |
-| `branch`      | the current git branch                                       |
-| `diff`        | added / changed / removed line counts vs HEAD               |
-| `diagnostics` | per-severity LSP diagnostic counts, with icons              |
-| `filename`    | file name (tail / relative / absolute) + `[+]`/`[-]`        |
-| `filetype`    | the filetype, with a devicon                                 |
-| `encoding`    | the file encoding                                           |
-| `progress`    | `Top` / `Bot` / `NN%` through the file                       |
-| `location`    | `line:col`                                                  |
-| `lsp`         | attached LSP client names                                   |
-| `label`       | static text (`{ "label", text = "…" }`)                     |
-| `searchcount` | `[idx/total]` of the last search (bounded `maxcount`)        |
-| `fileformat`  | unix / dos / mac (the line-ending style)                     |
-| `daemon`      | remote-daemon link status — connected green / reconnecting yellow / disconnected red (`nx.daemon.status()`); hidden on a local session |
-
-## Themes
-
-`options.theme` takes a theme table (lualine's `{ normal = { a, b, c }, insert, visual,
-… }` shape), a theme **name**, or `"auto"`. A name resolves the way lualine resolves one
-— a bundled theme first, otherwise `require("lualine.themes.<name>")` — so a colorscheme
-that ships a lualine theme drops in unchanged:
-
-```lua
-require("nxvim-line").setup({ options = { theme = "catppuccin" } })  -- catppuccin's own lualine theme
-```
-
-`"auto"` instead derives a palette from your active colorscheme, tracking whatever you've
-loaded with no per-scheme wiring. Register your own with
-`require("nxvim-line").register_theme(name, table)`.
-
-Internally the theme is applied as the highlight groups lualine itself generates —
-`lualine_a_normal`, `lualine_a_insert`, `lualine_c_inactive`, … — so a colorscheme or a
-config that already styles those groups, and a component `color = "SomeHlGroup"`, all
-work as they do under lualine.
-
-## Extending
-
-Call the `register_*` functions **before** `setup()` so the config sees them.
-
-```lua
-local line = require("nxvim-line")
-
--- A custom component: `provide(ctx, opts)` returns a cell `{ text, hl? }` (or a list of
--- cells, or nil); `events` invalidate it (here it rides `options.refresh` instead).
-line.register_component("clock", {
-  events = {},
-  provide = function() return { text = os.date("%H:%M") } end,
-})
-
--- A custom theme (lualine's per-mode palette shape).
-line.register_theme("mine", {
-  normal = { a = { fg = "#1e1e2e", bg = "#89b4fa" }, b = {...}, c = {...} },
-  insert = { a = { fg = "#1e1e2e", bg = "#a6e3a1" } },
-  -- visual / replace / command / terminal / inactive …
-})
-
--- A custom extension (per-filetype layout) and extra filetype icons.
-line.register_extension("help", {
-  filetypes = { "help" },
-  sections = { lualine_a = { { "label", text = "Help" } } },
-})
-line.register_icons({ rs = "", name = { ["Makefile"] = "" } })
-```
-
-Full reference: `:help nxvim-line` (the bundled manual, `doc/nxvim-line.txt`).
-
-## Tests
-
-This plugin carries a Lua test suite (`test/*_spec.lua`) on nxvim's native `nx.test`
-framework. Run it headlessly:
+A Lua test suite (`test/*_spec.lua`) runs on nxvim's native `nx.test` framework:
 
 ```sh
 nxvim --test-plugin .
 ```
+
+The vimdoc `doc/nxvim-line.txt` is **generated** from `doc/nxvim-line.md` via
+[panvimdoc](https://github.com/kdheepak/panvimdoc): edit the `.md`, then run
+`bash scripts/gen-vimdoc.sh` (needs `pandoc` + `git`). Never edit the `.txt` by hand.
 
 ## License
 

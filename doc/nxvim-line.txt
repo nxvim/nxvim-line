@@ -1,43 +1,62 @@
-*nxvim-line.txt*	A lualine-style statusline for nxvim
+*nxvim-line.txt*                          A lualine-style statusline for nxvim
 
 ==============================================================================
-NXVIM-LINE						*nxvim-line* *nxvim-line-intro*
+Table of Contents                               *nxvim-line-table-of-contents*
 
-nxvim-line is a fully-featured, lualine-style statusline. It gives you
-lualine's config shape — `sections = { lualine_a = {...}, ... }`, themeable,
+1. How it works                                      |nxvim-line-how-it-works|
+2. Setup                                                    |nxvim-line-setup|
+3. Options                                                |nxvim-line-options|
+4. Sections                                              |nxvim-line-sections|
+  - Inactive sections                  |nxvim-line-sections-inactive-sections|
+5. Components                                          |nxvim-line-components|
+6. Component options                            |nxvim-line-component-options|
+7. Themes                                                  |nxvim-line-themes|
+8. Highlights                                          |nxvim-line-highlights|
+9. Extensions                                          |nxvim-line-extensions|
+10. Tabline                                               |nxvim-line-tabline|
+11. API                                                       |nxvim-line-api|
+12. Custom components                           |nxvim-line-custom-components|
+13. Not supported                                   |nxvim-line-not-supported|
+A fully-featured, lualine-style statusline for nxvim. It gives you lualine's
+config shape — `sections = { lualine_a = {...}, ... }`, themeable,
 mode-coloured, powerline-separated, with a rich component library — but it is
 a COMPILER, not a renderer: the editor already owns statusline rendering via
-the native |nx.statusline| segment registry, so nxvim-line LOWERS a
+the native `nx.statusline` segment registry, so nxvim-line LOWERS a
 lualine-shaped config onto that primitive and lets the hot path stay in Rust.
 
-	require("nxvim-line").setup({
-	  options = { theme = "auto" },
-	  sections = {
-	    lualine_a = { "mode" },
-	    lualine_b = { "branch", "diff", "diagnostics" },
-	    lualine_c = { "filename" },
-	    lualine_x = { "encoding", "filetype" },
-	    lualine_y = { "progress" },
-	    lualine_z = { "location" },
-	  },
-	})
+>lua
+    require("nxvim-line").setup({
+      options = { theme = "auto" },
+      sections = {
+        lualine_a = { "mode" },
+        lualine_b = { "branch", "diff", "diagnostics" },
+        lualine_c = { "filename" },
+        lualine_x = { "encoding", "filetype" },
+        lualine_y = { "progress" },
+        lualine_z = { "location" },
+      },
+    })
+<
 
-Contents:
-	Setup			|nxvim-line-setup|
-	Options			|nxvim-line-options|
-	Sections		|nxvim-line-sections|
-	Components		|nxvim-line-components|
-	Component options	|nxvim-line-component-options|
-	Themes			|nxvim-line-themes|
-	Highlight groups	|nxvim-line-highlights|
-	Extensions		|nxvim-line-extensions|
-	Tabline			|nxvim-line-tabline|
-	API			|nxvim-line-api|
-	Custom components	|nxvim-line-custom-component|
-	Not supported		|nxvim-line-unsupported|
+                                                *nxvim-line* *nxvim-line-intro*
+
 
 ==============================================================================
-SETUP							*nxvim-line-setup*
+1. How it works                                      *nxvim-line-how-it-works*
+
+nxvim-line is a compiler, not a renderer. The editor already owns statusline
+rendering through the native `nx.statusline` segment registry: built-in
+segments (`mode`, `location`, `diagnostics`, …) resolve in Rust every frame,
+and custom Lua segments run their `render` only when invalidated by a declared
+event — never per frame (ADR 0002). nxvim-line takes the lualine-shaped
+config and lowers it onto that primitive: it registers one custom segment per
+section, defines the highlight groups for the theme, and wires each
+component's invalidation events. The hot path stays in Rust; your config
+stays familiar.
+
+
+==============================================================================
+2. Setup                                                    *nxvim-line-setup*
 
 `require("nxvim-line").setup(config)` merges `config` over the defaults,
 validates it (an unknown component / theme / extension is a HARD ERROR naming
@@ -47,262 +66,285 @@ idempotent: calling it again tears down the prior layout and rebuilds.
 Install via `:Plugins` (the nxvim plugin manager). A minimal config is just
 `require("nxvim-line").setup({})` — every field below has a default.
 
+
 ==============================================================================
-OPTIONS							*nxvim-line-options*
+3. Options                                                *nxvim-line-options*
 
 `config.options` — global behaviour. Defaults shown.
 
-	theme = "auto"			|nxvim-line-themes|
-	globalstatus = false		one bottom bar (laststatus = 3)
-	icons_enabled = true		Nerd-Font glyphs (false → plain text)
-	icon_provider = nil		a devicons-equivalent function(name)->glyph
-	section_separators = { left = "", right = "" }
-	component_separators = { left = "", right = "" }
-	disabled_filetypes = { statusline = {} }
-	refresh = { statusline = 1000 }
+>lua
+    theme = "auto"                    -- see Themes below
+    globalstatus = false              -- one bottom bar (laststatus = 3)
+    icons_enabled = true              -- Nerd-Font glyphs (false → plain text)
+    icon_provider = nil               -- a devicons-equivalent function(name) -> glyph
+    section_separators = { left = "", right = "" }
+    component_separators = { left = "", right = "" }
+    disabled_filetypes = { statusline = {} }
+    refresh = { statusline = 1000 }
+<
 
-							*nxvim-line-globalstatus*
-`globalstatus` — `true` sets `laststatus = 3` (one bar for the whole screen).
-Inactive-window layouts (|nxvim-line-inactive|) therefore only show under
-`laststatus = 2` (a bar per window), as in lualine.
+`globalstatus = true` sets `laststatus = 3` (one bar for the whole screen).
+Inactive-window layouts therefore only show under `laststatus = 2` (a bar per
+window), as in lualine.
 
-							*nxvim-line-separators*
 `section_separators` are the powerline arrows BETWEEN sections (their two
 colours are the adjacent sections' backgrounds); `component_separators` sit
 between components WITHIN a section. Each is `{ left = , right = }` (left-half
-sections use `.left`, right-half `.right`) or a bare string for both sides.
-Set to `""` to drop a separator.
+sections use `.left`, right-half `.right`) or a bare string for both sides. Set
+to `""` to drop a separator.
 
-							*nxvim-line-icons*
 `icons_enabled = false` renders every component as plain text (no glyphs) —
 the terminal-without-a-Nerd-Font path. `icon_provider` is a function the
 `filetype` component (and the icon registry) defers to, so a devicons
-equivalent can drive the glyphs; see also |nxvim-line.register_icons|.
+equivalent can drive the glyphs; see also `register_icons` under API.
 
-							*nxvim-line-refresh*
 `refresh.statusline` (ms) is a coarse timer that re-renders time-varying
 sections (e.g. a clock component); `0` disables it. Mode colour is NOT on this
-timer — it is event-driven via `ModeChanged` — so the timer can stay coarse.
+timer — it is event-driven via `ModeChanged` — so the timer can stay
+coarse.
 
-							*nxvim-line-disabled*
 `disabled_filetypes.statusline` is a list of filetypes whose window shows a
 blank bar (e.g. `{ "nxvim-tree" }`).
 
+
 ==============================================================================
-SECTIONS						*nxvim-line-sections*
+4. Sections                                              *nxvim-line-sections*
 
 `config.sections` is the active-window layout; `config.inactive_sections` the
-non-focused-window layout (|nxvim-line-inactive|). Both take the six lualine
-section keys — `lualine_a`/`b`/`c` (left half) and `lualine_x`/`y`/`z` (right
-half) — each a list of components. A user `sections` entry REPLACES that
+non-focused-window layout. Both take the six lualine section keys —
+`lualine_a` / `b` / `c` (left half) and `lualine_x` / `y` / `z` (right half)
+— each a list of components. A user `sections` entry REPLACES that
 section's default wholesale (lualine semantics); unspecified sections keep
 their defaults.
 
 A component entry is either a bare string naming a component:
 
-	lualine_a = { "mode" }
+>lua
+    lualine_a = { "mode" }
+<
 
-or a table whose `[1]` is the name plus per-component options
-(|nxvim-line-component-options|):
+or a table whose `[1]` is the name plus per-component options (see Component
+options):
 
-	lualine_c = { { "filename", path = 1, color = { fg = "#ff0000" } } }
+>lua
+    lualine_c = { { "filename", path = 1, color = { fg = "#ff0000" } } }
+<
 
-							*nxvim-line-inactive*
+
+INACTIVE SECTIONS                      *nxvim-line-sections-inactive-sections*
+
 `inactive_sections` renders for windows that do not hold focus, flat (no
 powerline arrows) in the dim `lualine_<section>_inactive` groups. Its default
 is `{ lualine_c = { "filename" }, lualine_x = { "location" } }`.
 
+
 ==============================================================================
-COMPONENTS						*nxvim-line-components*
+5. Components                                          *nxvim-line-components*
 
 The built-in component library. Each reads editor state through `nx.*` and
 re-renders only on its own events (never per frame).
 
-	mode		The mode label (NORMAL / INSERT / VISUAL / …). The data
-			source for the mode colour (|nxvim-line-themes|).
-	branch		The current git branch ( glyph + name). Async, cached.
-	diff		Added / changed / removed line counts vs HEAD, each a
-			coloured sub-cell (DiffAdd/DiffChange/DiffDelete). Async.
-	diagnostics	Per-severity LSP counts, coloured with the editor's
-			Diagnostic{Error,Warn,Info,Hint} groups. Opt `symbols`.
-	filename	The buffer name (+ [+]/[-] flags). Opt `path` =
-			0 (tail, default) | 1 (relative to cwd) | 2 (absolute).
-	filetype	The filetype, with its devicon. (|nxvim-line-icons|)
-	encoding	'fileencoding'.
-	fileformat	The line-ending style — unix / dos / mac
-			('fileformat'). Opt `symbols` maps each to a glyph.
-	progress	Top / Bot / NN% through the buffer.
-	location	line:col.
-	lsp		Attached LSP client names.
-	searchcount	`[idx/total]` of the last search pattern (the `/`
-			register), like vim's searchcount(). Bounded by
-			`opts.maxcount` (default 99; beyond it the total shows
-			`99+`); nothing when there is no pattern / no match.
-	label		Static text: `{ "label", text = "…" }`. The building
-			block for extension titles (|nxvim-line-extensions|).
+>
+    mode         The mode label (NORMAL / INSERT / VISUAL / …). The data source
+                 for the mode colour (see Themes).
+    branch       The current git branch (glyph + name). Async, cached.
+    diff         Added / changed / removed line counts vs HEAD, each a coloured
+                 sub-cell (DiffAdd / DiffChange / DiffDelete). Async.
+    diagnostics  Per-severity LSP counts, coloured with the editor's
+                 Diagnostic{Error,Warn,Info,Hint} groups. Opt `symbols`.
+    filename     The buffer name (+ [+]/[-] flags). Opt `path` = 0 (tail,
+                 default) | 1 (relative to cwd) | 2 (absolute).
+    filetype     The filetype, with its devicon (honours icons_enabled).
+    encoding     'fileencoding'.
+    fileformat   The line-ending style — unix / dos / mac ('fileformat').
+                 Opt `symbols` maps each to a glyph.
+    progress     Top / Bot / NN% through the buffer.
+    location     line:col.
+    lsp          Attached LSP client names.
+    searchcount  `[idx/total]` of the last search pattern (the `/` register),
+                 like vim's searchcount(). Bounded by `opts.maxcount` (default
+                 99; beyond it the total shows `99+`); nothing when there is no
+                 pattern / no match.
+    daemon       Remote-daemon link status (`nx.daemon.status()`) — connected,
+                 reconnecting, or disconnected, each in its own colour with a
+                 glyph. Hidden on a local (non-daemon) session. Opt `label` =
+                 false (icon only) | a string (override the phase word).
+    label        Static text: `{ "label", text = "…" }`. The building block for
+                 extension titles (see Extensions).
+<
 
-							*nxvim-line-inline*
-An inline FUNCTION is also a component (lualine's spelling):
-`{ function() return "…" end, color = … }`. It returns the component's text;
-the per-component options (|nxvim-line-component-options|) apply on top. It
-carries no events, so it updates on `refresh` or a sibling component's event.
+An inline FUNCTION is also a component (lualine's spelling): `{ function()
+return "…" end, color = … }`. It returns the component's text; the
+per-component options apply on top. It carries no events, so it updates on
+`refresh` or a sibling component's event.
 
-							*nxvim-line-deferred*
 No components are deferred today. The deferred mechanism remains: a component
 gated on a missing editor primitive is registered as deferred, so naming it in
 `sections` errors loud with the reason rather than rendering nothing.
 
+
 ==============================================================================
-COMPONENT OPTIONS				*nxvim-line-component-options*
+6. Component options                            *nxvim-line-component-options*
 
 Any component table accepts these (the lualine shape):
 
-	icon = "…"		A leading glyph (honours `icons_enabled`).
-	color = …		Override the cell highlight. Either a
-				highlight-group NAME (string), or a table
-				`{ fg = , bg = , gui = "bold,italic" }`
-				(interned as a generated group). Opts the
-				component out of the mode palette.
-	padding = 1		Spaces around the component: a number (both
-				sides) or `{ left = , right = }`.
-	cond = function(ctx) -> boolean
-				Gate whether the component renders.
-	fmt = function(str, ctx) -> string
-				Post-process the component's text (return
-				"" / nil to hide it).
-	on_click = function(clicks, button, mods)
-				Fire on a left-click of the component's cells.
+>
+    icon = "…"      A leading glyph (honours icons_enabled).
+    color = …       Override the cell highlight. Either a highlight-group NAME
+                    (string), or a table `{ fg = , bg = , gui = "bold,italic" }`
+                    (interned as a generated group). Opts the component out of the
+                    mode palette.
+    padding = 1     Spaces around the component: a number (both sides) or
+                    `{ left = , right = }`.
+    cond = function(ctx) -> boolean
+                    Gate whether the component renders.
+    fmt = function(str, ctx) -> string
+                    Post-process the component's text (return "" / nil to hide it).
+    on_click = function(clicks, button, mods)
+                    Fire on a left-click of the component's cells.
+<
 
 `ctx = { buf, win, focused }` is the rendered window's context. Plus any
 component-specific options (e.g. `filename.path`, `diagnostics.symbols`,
 `label.text`).
 
+
 ==============================================================================
-THEMES							*nxvim-line-themes*
+7. Themes                                                  *nxvim-line-themes*
 
 `options.theme` is one of:
 
-	a TABLE		A lualine-shaped palette, used as-is (see below).
-	"auto"		Derive a palette from the active colorscheme (reads
-			Normal / StatusLine / Function / String / … via
-			nx.hl.get, with fallbacks).
-	a NAME		Resolved bundled ("default") → `require(
-			"lualine.themes.<name>")` → error. So `theme =
-			"catppuccin"` loads catppuccin's own lualine theme
-			module (pure Lua on the runtimepath) unchanged.
-
-A palette is a per-mode table in lualine's exact shape: >
-	{
-	  normal  = { a = { fg = , bg = , gui = }, b = {…}, c = {…} },
-	  insert  = { a = {…} },
-	  visual  = { a = {…} }, replace = {…}, command = {…},
-	  terminal = {…}, inactive = {…},
-	}
+>
+    a TABLE   A lualine-shaped palette, used as-is (see below).
+    "auto"    Derive a palette from the active colorscheme (reads Normal /
+              StatusLine / Function / String / … via nx.hl.get, with fallbacks).
+    a NAME    Resolved bundled ("default") → require("lualine.themes.<name>") →
+              error. So theme = "catppuccin" loads catppuccin's own lualine theme
+              module (pure Lua on the runtimepath) unchanged.
 <
+
+A palette is a per-mode table in lualine's exact shape:
+
+>lua
+    {
+      normal   = { a = { fg = , bg = , gui = }, b = {…}, c = {…} },
+      insert   = { a = {…} },
+      visual   = { a = {…} }, replace = {…}, command = {…},
+      terminal = {…}, inactive = {…},
+    }
+<
+
 Per lualine's rules: x/y/z default to c/b/a; any unspecified mode defaults to
-`normal`; a section cell may be a `{fg,bg,gui}` table OR a string naming a
-highlight group to link to. Add one with |nxvim-line.register_theme|.
+`normal`; a section cell may be a `{ fg, bg, gui }` table OR a string naming a
+highlight group to link to. Add one with `register_theme` (see API).
+
 
 ==============================================================================
-HIGHLIGHT GROUPS					*nxvim-line-highlights*
+8. Highlights                                          *nxvim-line-highlights*
 
 The theme defines a group per (section, mode) under LUALINE's own naming —
 `lualine_a_normal`, `lualine_a_insert`, `lualine_c_inactive`, … — so a
-colorscheme or user override that already styles those groups just applies,
-and a component `color = "lualine_a_normal"` can reference them. Each section
-paints its cells in the group for the current mode; mode changes recolour
-every section via a single `ModeChanged` autocmd. The powerline arrows between
+colorscheme or user override that already styles those groups just applies, and
+a component `color = "lualine_a_normal"` can reference them. Each section
+paints its cells in the group for the current mode; mode changes recolour every
+section via a single `ModeChanged` autocmd. The powerline arrows between
 sections use generated transition groups (fg = one section's bg, bg = the
 other's).
 
+
 ==============================================================================
-EXTENSIONS						*nxvim-line-extensions*
+9. Extensions                                          *nxvim-line-extensions*
 
 `config.extensions` is a list of per-filetype layout overrides. When the
-rendered window's buffer has one of an extension's filetypes, the extension's
-section layout REPLACES the normal one (flat, no arrows; a section it omits
-renders empty). An entry is a bundled NAME or an inline table: >
-	extensions = {
-	  "nxvim-tree",      -- bundled (alias: "nvim-tree") — a tree title
-	  "quickfix",        -- bundled — a "Quickfix" label + the location
-	  {                  -- a custom extension
-	    filetypes = { "myft" },
-	    sections = { lualine_a = { { "label", text = "MINE" } } },
-	    inactive_sections = {},
-	  },
-	}
+rendered window's buffer has one of an extension's filetypes, the
+extension's section layout REPLACES the normal one (flat, no arrows; a
+section it omits renders empty). An entry is a bundled NAME or an inline table:
+
+>lua
+    extensions = {
+      "nxvim-tree",      -- bundled (alias: "nvim-tree") — a tree title
+      "quickfix",        -- bundled — a "Quickfix" label + the location
+      {                  -- a custom extension
+        filetypes = { "myft" },
+        sections = { lualine_a = { { "label", text = "MINE" } } },
+        inactive_sections = {},
+      },
+    }
 <
-Add a bundled extension with |nxvim-line.register_extension|.
+
+Add a bundled extension with `register_extension` (see API).
+
 
 ==============================================================================
-TABLINE							*nxvim-line-tabline*
+10. Tabline                                               *nxvim-line-tabline*
 
 `config.tabline` takes the same section keys as `sections`. If non-empty,
-nxvim-line lowers it onto the core 'tabline' %-format engine (a segment layout
-never applies to the tabline) — setting `'tabline'` to a live `%!` dispatcher
-and `'showtabline'` to 2. An empty `tabline` clears only what nxvim-line set. >
-	tabline = { lualine_a = { { "label", text = "tabs" } } }
+nxvim-line lowers it onto the core `'tabline'` %-format engine (a segment
+layout never applies to the tabline) — setting `'tabline'` to a live `%!`
+dispatcher and `'showtabline'` to 2. An empty `tabline` clears only what
+nxvim-line set.
+
+>lua
+    tabline = { lualine_a = { { "label", text = "tabs" } } }
+<
+
 
 ==============================================================================
-API							*nxvim-line-api*
+11. API                                                       *nxvim-line-api*
 
-	local line = require("nxvim-line")
+>lua
+    local line = require("nxvim-line")
+<
 
-line.setup(config)				*nxvim-line.setup*
-	Build / rebuild the statusline (idempotent). See |nxvim-line-setup|.
-
-line.refresh()					*nxvim-line.refresh*
-	Force a re-render of every active section (e.g. after changing
-	external state a component reads but has no event for).
-
-line.register_component(name, spec)		*nxvim-line.register_component*
-	Add a custom component. See |nxvim-line-custom-component|.
-
-line.register_theme(name, palette)		*nxvim-line.register_theme*
-	Add a bundled theme (a lualine-shaped palette). See
-	|nxvim-line-themes|.
-
-line.register_extension(name, ext)		*nxvim-line.register_extension*
-	Add a bundled extension `{ filetypes, sections, inactive_sections? }`.
-	See |nxvim-line-extensions|.
-
-line.register_icons(map)			*nxvim-line.register_icons*
-	Extend the filetype/extension glyph registry, e.g.
-	`{ rs = "", name = { ["Makefile"] = "" } }`.
+- `line.setup(config)` — build / rebuild the statusline (idempotent). See Setup.
+- `line.refresh()` — force a re-render of every active section (e.g. after changing external state
+    a component reads but has no event for).
+- `line.register_component(name, spec)` — add a custom component. See Custom components.
+- `line.register_theme(name, palette)` — add a bundled theme (a lualine-shaped palette). See Themes.
+- `line.register_extension(name, ext)` — add a bundled extension
+    `{ filetypes, sections, inactive_sections? }`. See Extensions.
+- `line.register_icons(map)` — extend the filetype/extension glyph registry, e.g.
+    `{ rs = "", name = { ["Makefile"] = "" } }`.
 
 Call the `register_*` functions BEFORE `setup()` so the config sees them.
 
+
 ==============================================================================
-WRITING A CUSTOM COMPONENT			*nxvim-line-custom-component*
+12. Custom components                           *nxvim-line-custom-components*
 
 A component is `{ events = {...}, provide = function(ctx, opts) -> result }`.
-`provide` is PURE — it reads editor state and returns cells; it runs only when
-the section is invalidated (by one of its `events`, or |nxvim-line.refresh|),
-never per frame. `result` is nil (nothing), a single cell
-`{ text = , hl? = }`, or a LIST of cells. >
+`provide` is PURE — it reads editor state and returns cells; it runs only
+when the section is invalidated (by one of its `events`, or `refresh`), never
+per frame. `result` is nil (nothing), a single cell `{ text = , hl? = }`, or a
+LIST of cells.
 
-	local line = require("nxvim-line")
-
-	line.register_component("clock", {
-	  events = {},                       -- driven by options.refresh instead
-	  provide = function(_ctx, _opts)
-	    return { text = os.date("%H:%M") }
-	  end,
-	})
-
-	line.setup({
-	  options = { refresh = { statusline = 1000 } },
-	  sections = { lualine_z = { "clock" } },
-	})
+>lua
+    local line = require("nxvim-line")
+    
+    line.register_component("clock", {
+      events = {},                       -- driven by options.refresh instead
+      provide = function(_ctx, _opts)
+        return { text = os.date("%H:%M") }
+      end,
+    })
+    
+    line.setup({
+      options = { refresh = { statusline = 1000 } },
+      sections = { lualine_z = { "clock" } },
+    })
 <
-`ctx = { buf, win, focused }`. A cell's `hl` is a highlight-group name; omit it
-to inherit the section's mode colour. Return a list of cells to colour parts
-independently (as `diff` / `diagnostics` do).
+
+`ctx = { buf, win, focused }`. A cell's `hl` is a highlight-group name; omit
+it to inherit the section's mode colour. Return a list of cells to colour
+parts independently (as `diff` / `diagnostics` do).
+
 
 ==============================================================================
-NOT SUPPORTED						*nxvim-line-unsupported*
+13. Not supported                                   *nxvim-line-not-supported*
 
-- Winbar — needs a `'winbar'` option in nxvim-core (a per-window bar is a
-  separate, large core feature spanning every client renderer).
+- Winbar — needs a `'winbar'` option in nxvim-core (a per-window bar is a separate, large core
+    feature spanning every client renderer).
 
- vim:tw=78:ft=help:
+Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
+
+vim:tw=78:ts=8:noet:ft=help:norl:
