@@ -17,6 +17,7 @@ Table of Contents                               *nxvim-line-table-of-contents*
 11. API                                                       |nxvim-line-api|
 12. Custom components                           |nxvim-line-custom-components|
 13. Not supported                                   |nxvim-line-not-supported|
+
 A fully-featured, lualine-style statusline for nxvim. It gives you lualine's
 config shape — `sections = { lualine_a = {...}, ... }`, themeable,
 mode-coloured, powerline-separated, with a rich component library — but it is
