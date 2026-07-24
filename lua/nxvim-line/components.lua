@@ -82,6 +82,15 @@ local MODE_LABEL = {
   c = "COMMAND",
   t = "TERMINAL",
   m = "MULTICURSOR", -- nxvim's multi-cursor placement mode (mode() reports "m")
+  -- Helix's selection-first modes (opt-in via `:helix` / nx.helix.enable). mode()
+  -- reports "hn"/"hs"; mirror the core's Mode::label() so the bar reads HELIX /
+  -- HELIX-SEL rather than the raw code.
+  hn = "HELIX",
+  hs = "HELIX-SEL",
+  -- vim Select mode — charwise ("s") and linewise-gH ("S"). Distinct from Visual
+  -- so a snippet tabstop / rename widget shows SELECT, not the raw code.
+  s = "SELECT",
+  S = "S-LINE",
 }
 
 M.register("mode", {

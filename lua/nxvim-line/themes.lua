@@ -34,6 +34,14 @@ local MODE_OF = {
   -- palette, so reuse `visual` (the closest multi-selection colour) — distinct
   -- from normal, and defined by every theme.
   m = "visual",
+  -- Helix's selection-first modes (mode() reports hn/hs). Normal keeps the normal
+  -- palette; select (extend) reuses `visual` like vim's visual modes — lualine
+  -- themes carry no dedicated helix/select key.
+  hn = "normal",
+  hs = "visual",
+  -- vim Select mode: charwise `s` / linewise-gH `S`. A selection mode → `visual`.
+  s = "visual",
+  S = "visual",
 }
 
 function M.mode_of(code)

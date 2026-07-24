@@ -24,6 +24,14 @@ nx.test.describe("nxvim-line.themes (pure)", function()
       R = "replace",
       c = "command",
       t = "terminal",
+      -- Helix's selection-first modes (mode() reports hn/hs): normal keeps the
+      -- normal palette, select (extend) reuses visual like vim's visual modes.
+      hn = "normal",
+      hs = "visual",
+      -- vim Select mode (charwise `s` / linewise `S`) — a selection mode, so it
+      -- takes the visual palette (lualine themes carry no dedicated select key).
+      s = "visual",
+      S = "visual",
     }
     for code, want in pairs(cases) do
       nx.test.expect(themes.mode_of(code)).to_be(want)
@@ -221,5 +229,42 @@ nx.test.describe("nxvim-line.theme", function()
     end)
     nx.test.expect(mode_hl()).to_be("lualine_a_visual")
     t:feed("<Esc>")
+  end)
+
+  nx.test.it("labels and colours Helix's selection-first modes", function(t)
+    line.setup({
+      options = { globalstatus = true, theme = "default" },
+      sections = { lualine_a = { "mode" } },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+    local function mode_hl()
+      local cells = compile._last.NxLineA
+      return cells and cells[1] and cells[1].hl
+    end
+
+    -- Enter Helix's selection-first normal mode: the bar reads HELIX (not the raw
+    -- "HN" code) and keeps the normal palette.
+    nx.helix.enable()
+    t:wait_for(function()
+      return t:statusline():find("HELIX")
+    end)
+    nx.test.expect(mode_hl()).to_be("lualine_a_normal")
+
+    -- `v` toggles Helix select (extend) mode: HELIX-SEL, coloured like visual.
+    t:feed("v")
+    t:wait_for(function()
+      return t:statusline():find("HELIX%-SEL")
+    end)
+    nx.test.expect(mode_hl()).to_be("lualine_a_visual")
+
+    -- Leave Helix so later tests see vim's Normal again.
+    t:feed("<Esc>")
+    nx.helix.disable()
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
   end)
 end)
