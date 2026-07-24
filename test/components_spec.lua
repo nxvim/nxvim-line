@@ -215,4 +215,31 @@ nx.test.describe("nxvim-line.git", function()
     })
     nx.test.expect(cell).to_be_nil()
   end)
+
+  nx.test.it("a synthetic panel (:messages) resolves no git branch", function(t)
+    -- A scratch listing like :messages carries a bracketed placeholder name
+    -- ([Messages]) — never a real file path. It must NOT inherit the launch
+    -- directory's branch (the old dir_of fell back to "." = cwd for a slash-less
+    -- name, so a session started inside a repo leaked that repo's branch onto the
+    -- panel). Statusline without branch so opening the panel doesn't itself fetch;
+    -- we drive git.ensure directly — exactly what the branch component does per render.
+    line.setup({ options = { globalstatus = true }, sections = { lualine_c = { "filename" } } })
+    t:feed(":messages<CR>")
+    local cur = nx.buf.current()
+    -- The panel is a nofile scratch surface — the neovim-idiomatic signal the git
+    -- source gates on so it never resolves a branch for a non-file buffer.
+    nx.test.expect(nx.bo[cur].buftype).to_be("nofile")
+    -- Clear any git-module state left by earlier tests (shared per-process) so this
+    -- measures ONLY what ensure() does for [Messages]: a bare cache/inflight/debounce,
+    -- a free concurrency slot, no lingering autocmds.
+    git.deactivate()
+    git._cache, git._inflight, git._queue, git._active = {}, {}, {}, 0
+    local before = git._stats.runs
+    git.ensure(cur)
+    nx.test.expect(git._stats.runs).to_be(before) -- no git run kicked for a synthetic buffer
+    nx.test.expect(git.get(cur)).to_be_nil()
+    -- and the branch component renders nothing on it
+    local cell = components.get("branch").provide({ buf = cur, win = nx.win.current() })
+    nx.test.expect(cell).to_be_nil()
+  end)
 end)

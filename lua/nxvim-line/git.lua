@@ -48,6 +48,17 @@ local function dir_of(buf)
   return vim.fn.getcwd()
 end
 
+-- Should this buffer resolve git data at all? Only a real file buffer (`buftype == ""`)
+-- does — a named file resolves against its own dir, and the empty No Name buffer against
+-- cwd like lualine. A scratch surface (`buftype ~= ""`: a `nofile` panel/listing like
+-- `:messages`, the quickfix window, a terminal, …) has no file backing, so it must NOT
+-- inherit the launch directory's branch. This is the neovim-idiomatic guard; before the
+-- core modelled `nofile`, `dir_of` saw a panel's slash-less placeholder name and fell
+-- back to `"."` (cwd), leaking the session's repo branch onto every scratch panel.
+local function is_git_buffer(buf)
+  return nx.bo[buf].buftype == ""
+end
+
 function M.get(buf)
   return M._cache[key(buf)]
 end
@@ -141,6 +152,9 @@ end
 -- do_refresh(buf): run a fetch now, or enqueue it (deduped by key) when at the cap. A key
 -- already inflight is a no-op (its result will land).
 local function do_refresh(buf)
+  if not is_git_buffer(buf) then
+    return
+  end
   local k = key(buf)
   if M._inflight[k] then
     return
@@ -175,6 +189,9 @@ end
 -- ensure(buf): the cache-miss FIRST paint — fetch immediately (no debounce) so the bar
 -- shows git data on first render, but only when nothing is cached, inflight, or pending.
 function M.ensure(buf)
+  if not is_git_buffer(buf) then
+    return
+  end
   local k = key(buf)
   if M._cache[k] == nil and not M._inflight[k] and not M._debounce[k] then
     do_refresh(buf)
