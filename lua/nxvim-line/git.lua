@@ -1,6 +1,6 @@
 -- nxvim-line.git: the async git data source for the `branch` / `diff` components.
 --
--- Runs `git` off the editor tick via `nx.run`, caches per file, and invalidates the
+-- Queries git off the editor tick via the native `nx.git.*` API, caches per file, and invalidates the
 -- hosting segments when fresh data lands. The components' `provide` calls `ensure(buf)`
 -- (kick a fetch if nothing is cached for this file yet) and reads `get(buf)`. Because a
 -- custom segment re-renders whenever its window's buffer changes — a switch, OR a fresh
@@ -63,25 +63,6 @@ function M.get(buf)
   return M._cache[key(buf)]
 end
 
-function M._parse_diff(out)
-  local added, changed, removed = 0, 0, 0
-  for line in (out .. "\n"):gmatch("(.-)\n") do
-    local o, n = line:match("^@@ %-(%S+) %+(%S+) @@")
-    if o then
-      local oc = tonumber(o:match(",(%d+)$") or "1")
-      local nc = tonumber(n:match(",(%d+)$") or "1")
-      if oc == 0 then
-        added = added + nc
-      elseif nc == 0 then
-        removed = removed + oc
-      else
-        changed = changed + math.max(oc, nc)
-      end
-    end
-  end
-  return { added = added, changed = changed, removed = removed }
-end
-
 -- Forward declarations (the runner, the watch, and the submit path reference each other).
 local run_fetch, pump, ensure_watch
 
@@ -109,20 +90,22 @@ function run_fetch(k, file, dir)
     pump()
   end
   nx.async(function()
+    -- Branch via the native `nx.git.head` (replaces `git rev-parse --abbrev-ref HEAD`).
+    -- A path outside a repo REJECTS (ENOREPO) — swallow it and leave `branch` nil, the
+    -- old "code ~= 0 → no branch" behavior. An unborn HEAD still reports its branch name.
     local branch
-    local head =
-      nx.await(nx.run({ cmd = "git", args = { "-C", dir, "rev-parse", "--abbrev-ref", "HEAD" } }))
-    if head.code == 0 then
-      branch = head.stdout:gsub("%s+$", "")
-      if branch == "" then
-        branch = nil
-      end
+    local ok_head, head = pcall(nx.await, nx.git.head(dir))
+    if ok_head and head.branch and head.branch ~= "" then
+      branch = head.branch
     end
+    -- Per-file working-tree-vs-HEAD counts via the native `nx.git.diff_file` (replaces
+    -- `git diff -U0` + the hand-rolled `@@`-hunk parser). It resolves right to
+    -- { added, changed, removed } — the exact shape the components read.
     local diff
     if branch and file ~= "" then
-      local d = nx.await(nx.run({ cmd = "git", args = { "-C", dir, "diff", "-U0", "--", file } }))
-      if d.code == 0 then
-        diff = M._parse_diff(d.stdout)
+      local ok_diff, d = pcall(nx.await, nx.git.diff_file(dir, file))
+      if ok_diff then
+        diff = d
       end
     end
     -- Publish the result FIRST (release the slot, fire on_update) so a slow / failing watch
@@ -134,13 +117,11 @@ function run_fetch(k, file, dir)
     end
     -- Best-effort: set up (once) a watch on this repo's .git so an external HEAD/index
     -- change (commit / checkout / stage) refreshes the bar. Any failure is swallowed.
+    -- `nx.git.discover` gives the absolute git-dir (replaces `rev-parse --absolute-git-dir`).
     if branch then
       pcall(function()
-        local gd =
-          nx.await(nx.run({ cmd = "git", args = { "-C", dir, "rev-parse", "--absolute-git-dir" } }))
-        if gd.code == 0 then
-          ensure_watch(gd.stdout:gsub("%s+$", ""))
-        end
+        local disc = nx.await(nx.git.discover(dir))
+        ensure_watch(disc.git_dir)
       end)
     end
   end)():catch(function(e)

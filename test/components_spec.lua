@@ -115,20 +115,6 @@ nx.test.describe("nxvim-line.components", function()
 end)
 
 nx.test.describe("nxvim-line.git", function()
-  -- Pure: hunk headers -> added/changed/removed.
-  nx.test.it("_parse_diff classifies hunks", function()
-    local out = table.concat({
-      "@@ -0,0 +1,3 @@", -- 3 added
-      "@@ -5,2 +7,0 @@", -- 2 removed
-      "@@ -10,2 +12,2 @@", -- 2 changed
-      "@@ -20 +22 @@", -- 1 changed (counts omitted = 1)
-    }, "\n")
-    local d = git._parse_diff(out)
-    nx.test.expect(d.added).to_be(3)
-    nx.test.expect(d.removed).to_be(2)
-    nx.test.expect(d.changed).to_be(3)
-  end)
-
   nx.test.it("branch + diff render for a real repo", function(t)
     local dir = nx.test.tempdir()
     local function g(...)

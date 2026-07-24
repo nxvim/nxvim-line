@@ -18,7 +18,7 @@
 --   components.lua  the component registry + library                         (Phase 1 ✅, grows)
 --   highlights.lua  per-section / per-mode highlight groups + separators      (Phase 3/4)
 --   themes/         theme tables + colorscheme auto-derive                    (Phase 4)
---   git.lua         async branch + diff counts via nx.run                     (Phase 6)
+--   git.lua         async branch + diff counts via nx.git.*                   (Phase 6)
 --   icons.lua       filetype/extension -> glyph registry                      (Phase 3)
 --   extensions.lua  per-filetype layout overrides                            (Phase 7)
 --
