@@ -9,6 +9,7 @@ Table of Contents                               *nxvim-line-table-of-contents*
 4. Sections                                              |nxvim-line-sections|
   - Inactive sections                  |nxvim-line-sections-inactive-sections|
 5. Components                                          |nxvim-line-components|
+  - searchcount notes                |nxvim-line-components-searchcount-notes|
 6. Component options                            |nxvim-line-component-options|
 7. Themes                                                  |nxvim-line-themes|
 8. Highlights                                          |nxvim-line-highlights|
@@ -77,9 +78,9 @@ Install via `:Plugins` (the nxvim plugin manager). A minimal config is just
     theme = "auto"                    -- see Themes below
     globalstatus = false              -- one bottom bar (laststatus = 3)
     icons_enabled = true              -- Nerd-Font glyphs (false → plain text)
-    icon_provider = nil               -- a devicons-equivalent function(name) -> glyph
-    section_separators = { left = "", right = "" }
-    component_separators = { left = "", right = "" }
+    icon_provider = nil               -- devicons-equivalent fn(name)->glyph
+    section_separators = { left = "\u{e0b0}", right = "\u{e0b2}" }
+    component_separators = { left = "\u{e0b1}", right = "\u{e0b3}" }
     disabled_filetypes = { statusline = {} }
     refresh = { statusline = 1000 }
 <
@@ -88,11 +89,14 @@ Install via `:Plugins` (the nxvim plugin manager). A minimal config is just
 Inactive-window layouts therefore only show under `laststatus = 2` (a bar per
 window), as in lualine.
 
-`section_separators` are the powerline arrows BETWEEN sections (their two
-colours are the adjacent sections' backgrounds); `component_separators` sit
-between components WITHIN a section. Each is `{ left = , right = }` (left-half
-sections use `.left`, right-half `.right`) or a bare string for both sides. Set
-to `""` to drop a separator.
+`section_separators` are the solid powerline arrows BETWEEN sections (their two
+colours are the adjacent sections' backgrounds); `component_separators` are
+the thin chevrons between components WITHIN a section. Each is `{ left = ,
+right = }` (left-half sections use `.left`, right-half `.right`) or a bare
+string for both sides. Set to `""` to drop a separator.
+
+The defaults are shown as `\u{...}` escapes because they are Nerd-Font glyphs;
+write them that way, paste the glyph itself, or use any plain string (`"|"`).
 
 `icons_enabled = false` renders every component as plain text (no glyphs) —
 the terminal-without-a-Nerd-Font path. `icon_provider` is a function the
@@ -117,6 +121,11 @@ non-focused-window layout. Both take the six lualine section keys —
 — each a list of components. A user `sections` entry REPLACES that
 section's default wholesale (lualine semantics); unspecified sections keep
 their defaults.
+
+Those six are the ONLY valid keys. Any other key is a hard error naming it, in
+`sections`, `inactive_sections`, and `tabline` alike — a typo (`lualine_d`)
+would otherwise drop every component in it while the config still looked
+accepted, leaving a silently wrong bar.
 
 A component entry is either a bare string naming a component:
 
@@ -146,14 +155,18 @@ The built-in component library. Each reads editor state through `nx.*` and
 re-renders only on its own events (never per frame).
 
 >
-    mode         The mode label (NORMAL / INSERT / VISUAL / …). The data source
-                 for the mode colour (see Themes). Also labels the selection-first
-                 Helix modes (HELIX / HELIX-SEL, opt-in via `:helix`) and vim's
-                 Select mode (SELECT / S-LINE); Helix-normal takes the normal
-                 palette, the extend/select modes the visual palette.
+    mode         The mode label (NORMAL / INSERT / VISUAL / …). The data
+                 source for the mode colour (see Themes). Also labels the
+                 selection-first Helix modes (HELIX / HELIX-SEL, opt-in via
+                 `:helix`) and vim's Select mode (SELECT / S-LINE);
+                 Helix-normal takes the normal palette, the extend/select
+                 modes the visual palette. The `i_CTRL-O` one-shot (`niI` /
+                 `niR`) reads NORMAL, as in lualine — it IS Normal mode for
+                 that one command.
     branch       The current git branch (glyph + name). Async, cached.
-    diff         Added / changed / removed line counts vs HEAD, each a coloured
-                 sub-cell (DiffAdd / DiffChange / DiffDelete). Async.
+    diff         Added / changed / removed line counts vs HEAD, each a
+                 coloured sub-cell (DiffAdd / DiffChange / DiffDelete).
+                 Async.
     diagnostics  Per-severity LSP counts, coloured with the editor's
                  Diagnostic{Error,Warn,Info,Hint} groups. Opt `symbols`.
     filename     The buffer name (+ [+]/[-] flags). Opt `path` = 0 (tail,
@@ -165,16 +178,18 @@ re-renders only on its own events (never per frame).
     progress     Top / Bot / NN% through the buffer.
     location     line:col.
     lsp          Attached LSP client names.
-    searchcount  `[idx/total]` of the last search pattern (the `/` register),
-                 like vim's searchcount(). Bounded by `opts.maxcount` (default
-                 99; beyond it the total shows `99+`); nothing when there is no
-                 pattern / no match.
-    daemon       Remote-daemon link status (`nx.daemon.status()`) — connected,
-                 reconnecting, or disconnected, each in its own colour with a
-                 glyph. Hidden on a local (non-daemon) session. Opt `label` =
-                 false (icon only) | a string (override the phase word).
-    label        Static text: `{ "label", text = "…" }`. The building block for
-                 extension titles (see Extensions).
+    searchcount  `[idx/total]` of the last search pattern (the `/`
+                 register), like vim's searchcount(). Bounded by
+                 `opts.maxcount` (default 99; beyond it the total shows
+                 `99+`); nothing when there is no pattern / no match. See
+                 the notes below.
+    daemon       Remote-daemon link status (`nx.daemon.status()`) —
+                 connected, reconnecting, or disconnected, each in its own
+                 colour with a glyph. Hidden on a local (non-daemon)
+                 session. Opt `label` = false (icon only) | a string
+                 (override the phase word).
+    label        Static text: `{ "label", text = "…" }`. The building block
+                 for extension titles (see Extensions).
 <
 
 An inline FUNCTION is also a component (lualine's spelling): `{ function()
@@ -187,6 +202,21 @@ gated on a missing editor primitive is registered as deferred, so naming it in
 `sections` errors loud with the reason rather than rendering nothing.
 
 
+SEARCHCOUNT NOTES                    *nxvim-line-components-searchcount-notes*
+
+`searchcount` reads the pattern from the `/` register and enumerates its
+matches with `nx.buf.search`, using the buffer's EFFECTIVE `'regexsyntax'`
+dialect — which defaults to `pcre`, not vim. So the count follows whatever
+the editor's own `/` search just matched: `fo+` counts as a PCRE quantifier
+under the default, and as a literal `fo+` only under `:set regexsyntax=vim`.
+
+Enumerating costs one pass over the buffer's text, so the result is cached
+per buffer against `nx.buf.changedtick` plus the pattern and `maxcount`. The
+component rides `CursorMoved`, and a cursor move at an unchanged buffer and
+pattern reuses the cached list (the cursor's index is a bisection over it)
+— moving through a large buffer never re-scans it.
+
+
 ==============================================================================
 6. Component options                            *nxvim-line-component-options*
 
@@ -195,15 +225,17 @@ Any component table accepts these (the lualine shape):
 >
     icon = "…"      A leading glyph (honours icons_enabled).
     color = …       Override the cell highlight. Either a highlight-group NAME
-                    (string), or a table `{ fg = , bg = , gui = "bold,italic" }`
-                    (interned as a generated group). Opts the component out of the
-                    mode palette.
+                    (string), or a table
+                    `{ fg = , bg = , gui = "bold,italic" }` (interned as a
+                    generated group). Opts the component out of the mode
+                    palette.
     padding = 1     Spaces around the component: a number (both sides) or
                     `{ left = , right = }`.
     cond = function(ctx) -> boolean
                     Gate whether the component renders.
     fmt = function(str, ctx) -> string
-                    Post-process the component's text (return "" / nil to hide it).
+                    Post-process the component's text (return "" / nil
+                    to hide it).
     on_click = function(clicks, button, mods)
                     Fire on a left-click of the component's cells.
 <
@@ -221,9 +253,11 @@ component-specific options (e.g. `filename.path`, `diagnostics.symbols`,
 >
     a TABLE   A lualine-shaped palette, used as-is (see below).
     "auto"    Derive a palette from the active colorscheme (reads Normal /
-              StatusLine / Function / String / … via nx.hl.get, with fallbacks).
-    a NAME    Resolved bundled ("default") → require("lualine.themes.<name>") →
-              error. So theme = "catppuccin" loads catppuccin's own lualine theme
+              StatusLine / Function / String / … via nx.hl.get, with
+              fallbacks).
+    a NAME    Resolved bundled ("default") →
+              require("lualine.themes.<name>") → error. So
+              theme = "catppuccin" loads catppuccin's own lualine theme
               module (pure Lua on the runtimepath) unchanged.
 <
 
@@ -286,7 +320,9 @@ Add a bundled extension with `register_extension` (see API).
 nxvim-line lowers it onto the core `'tabline'` %-format engine (a segment
 layout never applies to the tabline) — setting `'tabline'` to a live `%!`
 dispatcher and `'showtabline'` to 2. An empty `tabline` clears only what
-nxvim-line set.
+nxvim-line set: `'tabline'` goes back to empty and `'showtabline'` back to the
+value it had before nxvim-line raised it, so no empty bar is left occupying a
+screen row.
 
 >lua
     tabline = { lualine_a = { { "label", text = "tabs" } } }
@@ -300,15 +336,23 @@ nxvim-line set.
     local line = require("nxvim-line")
 <
 
-- `line.setup(config)` — build / rebuild the statusline (idempotent). See Setup.
-- `line.refresh()` — force a re-render of every active section (e.g. after changing external state
-    a component reads but has no event for).
-- `line.register_component(name, spec)` — add a custom component. See Custom components.
-- `line.register_theme(name, palette)` — add a bundled theme (a lualine-shaped palette). See Themes.
+- `line.setup(config)` — build / rebuild the statusline
+    (idempotent). See Setup.
+- `line.refresh()` — force a re-render of every active section
+    (e.g. after changing external state a component reads but has
+    no event for).
+- `line.register_component(name, spec)` — add a custom component.
+    See Custom components.
+- `line.register_theme(name, palette)` — add a bundled theme (a
+    lualine-shaped palette). See Themes.
 - `line.register_extension(name, ext)` — add a bundled extension
     `{ filetypes, sections, inactive_sections? }`. See Extensions.
-- `line.register_icons(map)` — extend the filetype/extension glyph registry, e.g.
-    `{ rs = "", name = { ["Makefile"] = "" } }`.
+- `line.register_icons(map)` — extend the filetype/extension glyph
+    registry, e.g.
+    `{ rs = "\u{e7a8}", name = { ["Makefile"] = "\u{e779}" } }`.
+    A glyph is a non-empty string or a `{ glyph = "…" }` table; anything
+    else is a hard error naming the offending key, rather than a glyph
+    that silently never appears.
 
 Call the `register_*` functions BEFORE `setup()` so the config sees them.
 
@@ -342,12 +386,32 @@ LIST of cells.
 it to inherit the section's mode colour. Return a list of cells to colour
 parts independently (as `diff` / `diagnostics` do).
 
+A spec may also carry `always = true`, declaring that `provide` NEVER returns
+nothing (as `mode`, `filename`, `location`, and `progress` do). It is purely an
+optimization: resolving where a powerline arrow points needs to know whether
+the neighbouring section renders anything, and an `always` component answers
+that with no call at all, so a section is never speculatively rendered just to
+test it for emptiness. Leave it unset unless the component is genuinely
+unconditional — declaring it on one that can return nil would strand an
+arrow's background over a collapsed section.
+
+>lua
+    line.register_component("clock", {
+      events = {},
+      always = true, -- os.date() always yields text
+      provide = function()
+        return { text = os.date("%H:%M") }
+      end,
+    })
+<
+
 
 ==============================================================================
 13. Not supported                                   *nxvim-line-not-supported*
 
-- Winbar — needs a `'winbar'` option in nxvim-core (a per-window bar is a separate, large core
-    feature spanning every client renderer).
+- Winbar — needs a `'winbar'` option in nxvim-core (a per-window
+    bar is a separate, large core feature spanning every client
+    renderer).
 
 Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
 

@@ -56,7 +56,11 @@ end
 -- core modelled `nofile`, `dir_of` saw a panel's slash-less placeholder name and fell
 -- back to `"."` (cwd), leaking the session's repo branch onto every scratch panel.
 local function is_git_buffer(buf)
-  return nx.bo[buf].buftype == ""
+  -- A debounced refresh lands a tick or more after it was scheduled, by which time the
+  -- buffer may be gone (`:bd`, a closed panel). Validity is checked here rather than at
+  -- each call site so no path can resolve `nx.buf.name` on a dead buffer and fall back
+  -- to cwd — which would fetch the SESSION's branch under a key nothing displays.
+  return nx.buf.is_valid(buf) and nx.bo[buf].buftype == ""
 end
 
 function M.get(buf)
@@ -84,7 +88,18 @@ function run_fetch(k, file, dir)
   M._inflight[k] = true
   M._active = M._active + 1
   M._stats.runs = M._stats.runs + 1
+  -- The slot is released inline (as soon as the data is published) AND from the
+  -- promise's `catch`, because anything after the inline release — notably the
+  -- `on_update` callback — can still throw. Guard it so those two paths can't both
+  -- decrement: an `on_update` that errors used to drive `_active` below zero, which
+  -- silently UNCAPS the runner (`_active < _max` stays true forever) and lets an
+  -- unbounded pile of git fetches run at once.
+  local released = false
   local function release()
+    if released then
+      return
+    end
+    released = true
     M._inflight[k] = nil
     M._active = M._active - 1
     pump()
@@ -156,6 +171,9 @@ end
 -- schedule(buf): a DEBOUNCED refresh — restart the per-key timer; the fetch fires once the
 -- key goes quiet for `debounce_ms`. Used by every event/watch trigger so a burst collapses.
 function M.schedule(buf)
+  if not is_git_buffer(buf) then
+    return -- nothing to coalesce; don't key a timer off a dead buffer's cwd fallback
+  end
   local k = key(buf)
   local h = M._debounce[k]
   if h then

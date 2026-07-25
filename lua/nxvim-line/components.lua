@@ -34,6 +34,14 @@ function M.deferred_reason(name)
 end
 
 -- register(name, spec): add a component. Public via `require("nxvim-line").register_component`.
+--
+-- `spec.always = true` declares that `provide` ALWAYS yields a visible cell (`mode`,
+-- `location`, `filename`, … never collapse to nothing). It is a pure optimization for
+-- the powerline-arrow neighbour resolution, which only needs to know *whether* a
+-- neighbouring section renders: an `always` component answers that with no call at
+-- all, so a section is never speculatively rendered just to test it for emptiness.
+-- Declaring it on a component that CAN return nil would strand an arrow's background
+-- over a collapsed section, so leave it unset unless the component is unconditional.
 function M.register(name, spec)
   if type(name) ~= "string" then
     error("nxvim-line.register_component: name must be a string")
@@ -44,7 +52,8 @@ function M.register(name, spec)
   if spec.events ~= nil and type(spec.events) ~= "table" then
     error("nxvim-line.register_component: 'events' must be a list of event names")
   end
-  M._registry[name] = { events = spec.events or {}, provide = spec.provide }
+  M._registry[name] =
+    { events = spec.events or {}, provide = spec.provide, always = spec.always == true }
 end
 
 function M.is_known(name)
@@ -72,16 +81,25 @@ M.register("label", {
 
 -- ----- mode ------------------------------------------------------------------
 
--- Short mode code (`nx.mode().mode`) -> a lualine-style label.
+-- Short mode code (`nx.mode().mode`) -> a lualine-style label. Keep this table in
+-- step with `themes.MODE_OF` (which maps the same codes to a palette): a code missing
+-- from either one degrades, and they must agree on which codes exist.
 local MODE_LABEL = {
   n = "NORMAL",
   i = "INSERT",
   v = "VISUAL",
   V = "V-LINE",
+  ["\22"] = "V-BLOCK", -- vim spells visual-block as a raw <C-v>; forward-compat
   R = "REPLACE",
   c = "COMMAND",
   t = "TERMINAL",
   m = "MULTICURSOR", -- nxvim's multi-cursor placement mode (mode() reports "m")
+  -- The `i_CTRL-O` one-shot: Normal for exactly one command, then Insert / Replace
+  -- resumes, which `mode()` reports as `niI` / `niR`. lualine labels both NORMAL (it
+  -- *is* Normal mode right now). Unmapped these fell through to `code:upper()` and
+  -- the bar read "NII" / "NIR".
+  niI = "NORMAL",
+  niR = "NORMAL",
   -- Helix's selection-first modes (opt-in via `:helix` / nx.helix.enable). mode()
   -- reports "hn"/"hs"; mirror the core's Mode::label() so the bar reads HELIX /
   -- HELIX-SEL rather than the raw code.
@@ -93,11 +111,20 @@ local MODE_LABEL = {
   S = "S-LINE",
 }
 
+-- The label for a code we don't map (a future editor mode, a `mode()` form added
+-- later): the code upper-cased, with control bytes stripped. A raw control byte in a
+-- status cell corrupts the bar's column math, so the fallback must stay printable.
+local function fallback_label(code)
+  local shown = code:upper():gsub("%c", "")
+  return shown ~= "" and shown or "?"
+end
+
 M.register("mode", {
   events = { "ModeChanged" },
+  always = true,
   provide = function()
     local code = nx.mode().mode
-    return { text = MODE_LABEL[code] or code:upper() }
+    return { text = MODE_LABEL[code] or fallback_label(code) }
   end,
 })
 
@@ -107,6 +134,7 @@ M.register("mode", {
 -- nomodifiable flags ride along ([+] / [-]).
 M.register("filename", {
   events = { "BufEnter", "BufWritePost", "TextChanged", "InsertLeave" },
+  always = true, -- an unnamed buffer still shows "[No Name]"
   provide = function(ctx, opts)
     local buf = ctx.buf
     local name = nx.buf.name(buf)
@@ -184,6 +212,7 @@ M.register("fileformat", {
 
 M.register("location", {
   events = { "CursorMoved", "CursorMovedI" },
+  always = true,
   provide = function(ctx)
     local c = nx.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
     return { text = string.format("%d:%d", c[1], (c[2] or 0) + 1) }
@@ -192,6 +221,7 @@ M.register("location", {
 
 M.register("progress", {
   events = { "CursorMoved", "CursorMovedI" },
+  always = true,
   provide = function(ctx)
     local row = nx.cursor.get(ctx.win)[1]
     local total = nx.buf.line_count(ctx.buf)
@@ -263,11 +293,86 @@ M.register("lsp", {
 
 -- The match index / total for the last search pattern (vim's `searchcount()`), e.g.
 -- `[3/12]`. Pure-Lua: the pattern is the read-only `/` register; matches are enumerated
--- with positions via the native `nx.buf.search` (vim engine), so the cursor's index is
--- exact. Bounded by `opts.maxcount` (default 99 — vim's default) so a buffer with very many
--- matches never makes a render unbounded; beyond it the total shows as `99+`. Nothing is
--- shown when there is no pattern or no match in the buffer. Rides `CursorMoved` (a search,
+-- with positions via the native `nx.buf.search`, so the cursor's index is exact. Bounded
+-- by `opts.maxcount` (default 99 — vim's default) so a buffer with very many matches
+-- never makes a render unbounded; beyond it the total shows as `99+`. Nothing is shown
+-- when there is no pattern or no match in the buffer. Rides `CursorMoved` (a search,
 -- `n`, `N` all move the cursor onto a match).
+--
+-- The enumeration is CACHED per buffer against `nx.buf.changedtick` — the canonical
+-- "did the text change" signal — plus the pattern and the bound. That matters because
+-- enumerating costs a full buffer text scan (each `nx.buf.search` runs from the previous
+-- match to the next one, so the walk sweeps the buffer once, compiling the pattern per
+-- call), and this component rides `CursorMoved`: recomputing per keystroke would make
+-- every `j` in a large buffer O(buffer), exactly the freeze CLAUDE.md's per-event rule
+-- forbids. With the cache a cursor move is a binary search over the cached starts.
+
+-- buf -> { tick, pattern, maxcount, starts = { { line, col }, … } } for the last scan.
+M._searchcount_cache = {}
+-- Introspection/tests: how many actual enumerations ran (the cache-miss count).
+M._searchcount_stats = { scans = 0 }
+
+-- The enumerated match starts for `buf`, reusing the cached list when the buffer text,
+-- the pattern, and the bound are all unchanged.
+local function search_starts(buf, pattern, maxcount)
+  local tick = nx.buf.changedtick(buf)
+  local hit = M._searchcount_cache[buf]
+  if hit and hit.tick == tick and hit.pattern == pattern and hit.maxcount == maxcount then
+    return hit.starts
+  end
+  M._searchcount_stats.scans = M._searchcount_stats.scans + 1
+  -- The pattern came from the `/` register, so it is written in the buffer's EFFECTIVE
+  -- `'regexsyntax'` dialect — which defaults to `pcre`, not vim. Hardcoding the vim
+  -- engine here silently mismatched every pattern whose spelling differs (`fo+` matched
+  -- nothing), so the bar showed no count for a search the editor had just performed.
+  local engine = nx.bo[buf].regexsyntax
+  if engine ~= "vim" and engine ~= "pcre" then
+    engine = "pcre"
+  end
+  local starts = {}
+  local from = { line = 1, col = 0 }
+  while #starts < maxcount do
+    local m = nx.buf.search(buf, pattern, { engine = engine, from = from })
+    if not m then
+      break
+    end
+    starts[#starts + 1] = { line = m.line, col = m.col }
+    -- advance past this match; bump by one on a zero-width match so we can't spin
+    local ecol = m.end_col
+    if ecol <= m.col then
+      ecol = m.col + 1
+    end
+    from = { line = m.line, col = ecol }
+  end
+  -- One entry per buffer, so pruning the dead ones on each miss keeps this tiny.
+  for b in pairs(M._searchcount_cache) do
+    if b ~= buf and not nx.buf.is_valid(b) then
+      M._searchcount_cache[b] = nil
+    end
+  end
+  M._searchcount_cache[buf] =
+    { tick = tick, pattern = pattern, maxcount = maxcount, starts = starts }
+  return starts
+end
+
+-- The 1-based index of the last match starting at or before (row, col), or 0 when the
+-- cursor sits before every match. `starts` is in buffer order, so this is a bisection —
+-- what keeps a cursor move off the O(buffer) enumeration path.
+local function index_at(starts, row, col)
+  local lo, hi, found = 1, #starts, 0
+  while lo <= hi do
+    local mid = (lo + hi) // 2
+    local s = starts[mid]
+    if s.line < row or (s.line == row and s.col <= col) then
+      found = mid
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+  return found
+end
+
 M.register("searchcount", {
   events = { "CursorMoved", "CursorMovedI" },
   provide = function(ctx, opts)
@@ -276,31 +381,13 @@ M.register("searchcount", {
       return nil
     end
     local maxcount = (opts and opts.maxcount) or 99
-    local cur = nx.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
-    local crow, ccol = cur[1], cur[2] or 0
-
-    local total, current = 0, 0
-    local from = { line = 1, col = 0 }
-    while total < maxcount do
-      local m = nx.buf.search(ctx.buf, pattern, { engine = "vim", from = from })
-      if not m then
-        break
-      end
-      total = total + 1
-      -- the current match: the last one whose start is at or before the cursor
-      if m.line < crow or (m.line == crow and m.col <= ccol) then
-        current = total
-      end
-      -- advance past this match; bump by one on a zero-width match so we can't spin
-      local ecol = m.end_col
-      if ecol <= m.col then
-        ecol = m.col + 1
-      end
-      from = { line = m.line, col = ecol }
-    end
+    local starts = search_starts(ctx.buf, pattern, maxcount)
+    local total = #starts
     if total == 0 then
       return nil
     end
+    local cur = nx.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
+    local current = index_at(starts, cur[1], cur[2] or 0)
     local shown = (total >= maxcount) and (maxcount .. "+") or tostring(total)
     return { text = string.format("[%d/%s]", current, shown) }
   end,

@@ -98,7 +98,13 @@ end
 
 -- define_theme(palette): predefine every `lualine_<section>_<mode>` group up front from a
 -- NORMALIZED palette (themes.normalize), and stash the palette so transition_group can read
--- adjacent section backgrounds. Nothing is created on the hot path after this.
+-- adjacent section backgrounds.
+--
+-- This covers every group a section's CELLS can take, so picking a highlight by mode is
+-- pure lookup on the hot path. The powerline TRANSITION groups stay lazy instead: the full
+-- product is 6 sections x 6 neighbours x 7 modes = 252 groups, of which a given layout uses
+-- a handful, so `transition_group` defines each on first use and caches it (one definition
+-- per build, then lookups).
 function M.define_theme(palette)
   theme_palette = palette
   for _, mode in ipairs(MODES) do

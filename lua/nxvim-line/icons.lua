@@ -91,15 +91,25 @@ function M.enabled()
 end
 
 -- Accept a glyph as a bare string or as a `{ glyph = … }` / `{ … }` table (the
--- nxvim-tree spelling), so a shared icon map drops in.
-local function glyph_of(v)
+-- nxvim-tree spelling), so a shared icon map drops in. Anything else is a hard error:
+-- storing the `nil` a malformed spec resolves to used to leave the caller with a glyph
+-- that never appeared and nothing to diagnose (CLAUDE.md: no silent stubs or skips).
+local function glyph_of(v, where)
+  local g
   if type(v) == "string" then
-    return v
+    g = v
+  elseif type(v) == "table" then
+    g = v.glyph or v[1]
   end
-  if type(v) == "table" then
-    return v.glyph or v[1]
+  if type(g) ~= "string" or g == "" then
+    error(
+      "nxvim-line.register_icons: "
+        .. where
+        .. " needs a non-empty glyph string (or a { glyph = … } table), got "
+        .. type(v)
+    )
   end
-  return nil
+  return g
 end
 
 -- register(map) — extend the registry. Top-level keys are extensions (`{ rs = "" }`);
@@ -109,14 +119,14 @@ function M.register(map)
   for k, v in pairs(map or {}) do
     if k == "name" or k == "by_name" then
       for n, spec in pairs(v) do
-        by_name[n] = glyph_of(spec)
+        by_name[n] = glyph_of(spec, "name[" .. tostring(n) .. "]")
       end
     elseif k == "by_ext" then
       for e, spec in pairs(v) do
-        by_ext[e:lower()] = glyph_of(spec)
+        by_ext[e:lower()] = glyph_of(spec, "by_ext[" .. tostring(e) .. "]")
       end
     else
-      by_ext[tostring(k):lower()] = glyph_of(v)
+      by_ext[tostring(k):lower()] = glyph_of(v, tostring(k))
     end
   end
 end

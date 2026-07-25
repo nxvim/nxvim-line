@@ -17,6 +17,7 @@
 -- sections take a colour transition group, and every section also re-renders on
 -- `ModeChanged`. A component with its own `color`/`hl` opts out of the section palette.
 
+local config = require("nxvim-line.config")
 local components = require("nxvim-line.components")
 local git = require("nxvim-line.git")
 local icons = require("nxvim-line.icons")
@@ -52,10 +53,9 @@ local SECTION_LETTER = {
 -- The fill section between the two halves uses lualine_c's colour (lualine's convention),
 -- so a half-edge powerline arrow transitions to/from "c".
 local FILL_SECTION = "c"
-local LEFT = { "lualine_a", "lualine_b", "lualine_c" }
-local RIGHT = { "lualine_x", "lualine_y", "lualine_z" }
-local ALL_SECTIONS =
-  { "lualine_a", "lualine_b", "lualine_c", "lualine_x", "lualine_y", "lualine_z" }
+-- The section key lists come from config.lua, the single place they're declared, so a
+-- section can never exist for validation and not for compilation (or vice versa).
+local LEFT, RIGHT, ALL_SECTIONS = config.LEFT, config.RIGHT, config.SECTIONS
 
 -- The segment names of the most recent build (for refresh()/invalidate_all).
 M._active = {}
@@ -66,6 +66,19 @@ M._active = {}
 -- with a split can read an UNFOCUSED window's cells. Both reset on each build().
 M._last = {}
 M._last_win = {}
+
+-- Drop `_last_win` rows for windows that are gone. `nx.statusline` re-renders a segment
+-- for every LIVE window, so nothing else ever removes a closed window's row: without this
+-- a long session of `:split` / `:close` accumulates one cell-list per window id it ever
+-- painted, forever (build() was the only reset). Runs per render and is O(tracked
+-- windows), which this keeps equal to the live window count.
+local function prune_last_win()
+  for win in pairs(M._last_win) do
+    if not nx.win.is_valid(win) then
+      M._last_win[win] = nil
+    end
+  end
+end
 
 -- The periodic-refresh timer generation. Each build() bumps it; the re-arming one-shot
 -- timer stops when its captured generation goes stale (the idempotent-rebuild contract).
@@ -222,12 +235,32 @@ end
 -- arrow's *effective* neighbour at render time: a neighbour that collapses to nothing
 -- (an empty git branch, no diagnostics) must be skipped so the arrow transitions into the
 -- first section that actually has content — or the fill — rather than carrying the empty
--- section's background over a gap. Cheap: the neighbour's `provide`s are cache-backed
--- (git.get after a one-shot ensure, a diagnostics count), so re-running them here is fine.
+-- section's background over a gap.
+--
+-- This runs the NEIGHBOUR's components, so it is speculative work on top of the
+-- neighbour's own render. Two things keep it bounded:
+--   * a component registered `always = true` (`mode`, `filename`, `location`, …) can
+--     never collapse, so its section is known non-empty with no call at all — and any
+--     such component is checked FIRST, since "does any component render" doesn't care
+--     about order;
+--   * a component with a `cond` is not `always` even if its provide is, so gating still
+--     collapses a section correctly.
+-- Everything left is cache-backed (git.get after a one-shot ensure, a diagnostics count,
+-- the memoized searchcount enumeration), so the remaining calls are cheap.
 local function section_renders(ctx, opts)
   local comps = pick_layout(ctx, opts, ctx.focused)
   if not comps or #comps == 0 then
     return false
+  end
+  for _, comp in ipairs(comps) do
+    if
+      comp._inline == nil
+      and comp.cond == nil
+      and comp.fmt == nil
+      and components.get(comp.name).always
+    then
+      return true
+    end
   end
   for _, comp in ipairs(comps) do
     if #component_cells(comp, ctx) > 0 then
@@ -286,16 +319,15 @@ local function render_section(ctx, opts)
     cells[#cells + 1] = cell
   end
 
-  -- The powerline arrows are drawn only for a focused BASE layout (pick_layout's verdict);
-  -- inactive and extension bars stay flat.
-  local arrows = want_arrows
-
+  -- The powerline arrows below are drawn only for a focused BASE layout (`want_arrows`,
+  -- pick_layout's verdict); inactive and extension bars stay flat.
+  --
   -- right half: the leading separator. A section bordering the central fill uses a
   -- thin COMPONENT-style separator in the section's own (light) fg — the fill is
   -- neutral (lualine_c), so a solid section arrow's colour transition there reads as
   -- a mismatched block (and is invisible when the section shares the fill colour).
   -- Inner section boundaries keep the solid powerline arrow.
-  if arrows and opts.side == "right" then
+  if want_arrows and opts.side == "right" then
     local neighbor = effective_neighbor(ctx, opts)
     if neighbor == FILL_SECTION then
       if opts.component_sep ~= "" then
@@ -327,7 +359,7 @@ local function render_section(ctx, opts)
   -- left half: the trailing arrow transitions FROM this section's bg INTO the neighbour —
   -- the first one that actually renders (an empty git-branch section is skipped so the
   -- arrow reaches the fill instead of stranding the branch bg over a collapsed section).
-  if arrows and opts.side == "left" then
+  if want_arrows and opts.side == "left" then
     cells[#cells + 1] = {
       text = opts.sep_glyph,
       hl = highlights.transition_group(opts.section, effective_neighbor(ctx, opts), mode),
@@ -476,6 +508,7 @@ local function register_section(b, events_both, is_git, out, git_segs)
     render = function(rctx)
       local cells = render_section(rctx, opts)
       M._last[segname] = cells
+      prune_last_win()
       M._last_win[rctx.win] = M._last_win[rctx.win] or {}
       M._last_win[rctx.win][segname] = cells
       return cells
@@ -617,9 +650,12 @@ end
 -- ----- tabline ---------------------------------------------------------------
 
 -- The normalized tabline section table of the current build (nil when no tabline), and
--- whether WE set `'tabline'` (so a later empty config clears only our own).
+-- whether WE set `'tabline'` (so a later empty config clears only our own). `_showtabline`
+-- remembers the user's `'showtabline'` from before we raised it, so clearing restores it
+-- rather than leaving an empty bar occupying a screen row.
 M._tabline_cfg = nil
 M._tabline_set = false
+M._showtabline = nil
 
 -- _tabline(): the `%`-format string for the tabline, lowered from the tabline section
 -- components. Called by the core `'tabline'` engine via `%!v:lua...` each render, so it is
@@ -669,6 +705,11 @@ local function build_tabline(config)
   end
   if has_tab then
     M._tabline_cfg = config.tabline
+    -- Capture `'showtabline'` on the way UP only (not on a rebuild that already has a
+    -- tabline), or a second setup{} would record our own 2 as the value to restore.
+    if not M._tabline_set then
+      M._showtabline = vim.o.showtabline
+    end
     vim.o.tabline = "%!v:lua.require('nxvim-line.compile')._tabline()"
     vim.o.showtabline = 2
     M._tabline_set = true
@@ -676,6 +717,12 @@ local function build_tabline(config)
     M._tabline_cfg = nil
     if M._tabline_set then
       vim.o.tabline = ""
+      -- Restore the pre-tabline `'showtabline'`: clearing only `'tabline'` left the bar
+      -- forced visible (showtabline = 2) with nothing in it — a wasted screen row.
+      if M._showtabline ~= nil then
+        vim.o.showtabline = M._showtabline
+        M._showtabline = nil
+      end
       M._tabline_set = false
     end
   end

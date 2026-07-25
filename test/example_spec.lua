@@ -14,8 +14,10 @@ nx.test.describe("nxvim-line.example", function()
         lualine_a = { "mode" },
         lualine_b = { "branch", "diff", "diagnostics" },
         lualine_c = { { "filename", path = 1 } },
-        lualine_x = { "encoding", "filetype" },
-        lualine_y = { "progress" },
+        -- mirrors examples/init.lua's right half exactly, `daemon` included: it renders
+        -- nothing on a local session, so it must not leave an E: cell in the bar
+        lualine_x = { "daemon", "encoding", "fileformat", "filetype" },
+        lualine_y = { "searchcount", "progress" },
         lualine_z = { "location" },
       },
       inactive_sections = {

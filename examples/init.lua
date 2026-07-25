@@ -2,14 +2,19 @@
 --
 --     NXVIM_CONFIG=examples nxvim examples/sample.lua
 --
--- Phases 1-4 are implemented: the config + the lualine->nx.statusline compiler + the
--- component library (mode, branch, diff, diagnostics, filename, filetype, encoding,
--- lsp, progress, location) + the lualine LOOK — Nerd-Font icons, separators,
--- per-component colour/padding, AND mode-reactive theme colour (the bar recolours by
--- mode; `theme = "auto"` derives from your colorscheme). See
--- docs/plans/2026-06-21-nxvim-line.md. TRY IT: open a file in a git repo (branch + diff
--- show, with a  glyph), switch modes (i / v / :) and watch section A + the powerline
--- edges recolour, and move the cursor.
+-- The config + the lualine->nx.statusline compiler + the component library (mode,
+-- branch, diff, diagnostics, filename, filetype, encoding, fileformat, lsp, progress,
+-- location, searchcount, daemon, label) + the lualine LOOK — Nerd-Font icons,
+-- separators, per-component colour/padding, and mode-reactive theme colour (the bar
+-- recolours by mode; `theme = "auto"` derives from your colorscheme). See
+-- docs/plans/2026-06-21-nxvim-line.md.
+--
+-- TYPE THIS / SEE THAT:
+--   * open a file in a git repo   -> section B shows the branch ( glyph) + diff counts
+--   * `i` / `v` / `:` then <Esc>  -> section A relabels AND recolours, arrows follow
+--   * `j` / `l`                   -> sections Y/Z (progress, line:col) update
+--   * `<C-w>s`                    -> the unfocused window gets the dim, flat bar
+--   * `/local<CR>` then `n` / `N` -> section Y shows searchcount's `[idx/total]`
 
 -- Load the plugin straight from this repo (a local-dev spec: `dir` is never cloned).
 -- A real config would instead use `{ "davidrios/nxvim-line", config = ... }` + :PluginSync.
@@ -27,7 +32,8 @@ nx.plugins({
           -- `daemon` shows the remote-link health on a `:connect` session (green/yellow/red);
           -- it renders nothing on a local session, so it's safe to leave in always.
           lualine_x = { "daemon", "encoding", "fileformat", "filetype" },
-          lualine_y = { "progress" },
+          -- `searchcount` renders nothing until you search, then `[idx/total]`.
+          lualine_y = { "searchcount", "progress" },
           lualine_z = { "location" },
         },
         -- non-focused windows get a dim, flat bar (split with <C-w>s to see it)

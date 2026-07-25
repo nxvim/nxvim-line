@@ -110,8 +110,31 @@ function M._normalize_entry(entry, where)
   return norm
 end
 
+-- The valid section keys, as a set — for the unknown-key check below.
+local IS_SECTION = {}
+for _, sec in ipairs(M.SECTIONS) do
+  IS_SECTION[sec] = true
+end
+
 -- Normalize + validate every component list in a `sections`-shaped table in place.
+-- A key that isn't one of the six sections is a HARD ERROR: only `lualine_a..c` /
+-- `lualine_x..z` are rendered, so a typo (`lualine_d`, `lualine_ b`) used to drop every
+-- component in it while the config still looked accepted — a silently wrong bar with
+-- nothing to point at (CLAUDE.md: no silent stubs or skips).
 function M._normalize_sections(sections, where)
+  for key in pairs(sections) do
+    if not IS_SECTION[key] then
+      error(
+        "nxvim-line.setup: unknown section '"
+          .. tostring(key)
+          .. "' in "
+          .. where
+          .. " (expected one of "
+          .. table.concat(M.SECTIONS, ", ")
+          .. ")"
+      )
+    end
+  end
   for _, sec in ipairs(M.SECTIONS) do
     local list = sections[sec]
     if list ~= nil then

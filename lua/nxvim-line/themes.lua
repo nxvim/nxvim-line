@@ -20,7 +20,8 @@ local M = {}
 local ALL_MODES = { "normal", "insert", "visual", "replace", "command", "terminal", "inactive" }
 
 -- nx.mode() short code → the theme's mode key. Visual-block (`\22` = <C-v>) maps to
--- visual; anything unrecognized falls back to `normal` (lualine's behaviour).
+-- visual; anything unrecognized falls back to `normal` (lualine's behaviour). Keep the
+-- code set in step with `components.MODE_LABEL`, which labels the same codes.
 local MODE_OF = {
   n = "normal",
   i = "insert",
@@ -30,6 +31,12 @@ local MODE_OF = {
   R = "replace",
   c = "command",
   t = "terminal",
+  -- The `i_CTRL-O` one-shot (`mode()` reports `niI` / `niR`): Normal for exactly one
+  -- command, so it takes the normal palette — like lualine. These already resolved to
+  -- `normal` through the unknown-code fallback; listed explicitly so the mapping is
+  -- intentional rather than incidental, and so this table matches MODE_LABEL's keys.
+  niI = "normal",
+  niR = "normal",
   -- nxvim's multi-cursor placement mode. lualine themes have no multicursor
   -- palette, so reuse `visual` (the closest multi-selection colour) — distinct
   -- from normal, and defined by every theme.
