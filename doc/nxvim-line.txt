@@ -230,7 +230,12 @@ Any component table accepts these (the lualine shape):
                     generated group). Opts the component out of the mode
                     palette.
     padding = 1     Spaces around the component: a number (both sides) or
-                    `{ left = , right = }`.
+                    `{ left = , right = }`. This padding takes the SECTION
+                    highlight when the component's edge cell carries one of
+                    its own (the per-kind `diff` and per-severity
+                    `diagnostics` counts), so a coloured count never bleeds
+                    into the gap beside it; a component-level `color` covers
+                    its own padding.
     cond = function(ctx) -> boolean
                     Gate whether the component renders.
     fmt = function(str, ctx) -> string

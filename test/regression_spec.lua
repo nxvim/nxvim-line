@@ -19,6 +19,7 @@ local line = require("nxvim-line")
 local components = require("nxvim-line.components")
 local compile = require("nxvim-line.compile")
 local themes = require("nxvim-line.themes")
+local highlights = require("nxvim-line.highlights")
 local git = require("nxvim-line.git")
 local icons = require("nxvim-line.icons")
 
@@ -234,6 +235,107 @@ nx.test.describe("nxvim-line.compile hygiene", function()
     nudge(t)
     nx.test.expect(vim.o.tabline).to_be("")
     nx.test.expect(vim.o.showtabline).to_be(before)
+  end)
+end)
+
+nx.test.describe("nxvim-line.own-highlight padding", function()
+  -- A component whose cells carry their OWN highlight (the per-kind `diff` counts, the
+  -- per-severity `diagnostics` counts) got its padding concatenated onto the run's edge
+  -- cells, and its internal separator prefixed onto the FOLLOWING cell. Both spaces
+  -- therefore took the wrong colour: the gap separating the component from its neighbour
+  -- was tinted with the FIRST count's colour, and the gap between two counts with the
+  -- colour of the count AFTER it. With background-coloured Diff*/Diagnostic* groups that
+  -- renders as `<add>" +12"<del>" -1 "` — a green block leaking left into the neighbour's
+  -- gap and a red block starting a space too early:
+  --
+  --     want:  ·<add>" +12 "<del>" -1 "·      got:  <add>" +12"<del>" -1 "
+  --
+  -- so each count owns the spaces on both sides of it, and the component's outer padding
+  -- stays neutral (the section group), belonging to no count.
+  nx.test.it("keeps the outer pad neutral and pads each diff count in its own colour", function(t)
+    -- Seed the cache so the render is deterministic (no git run, no repo needed); stub
+    -- the fetch entry points so nothing can land over the seed mid-test.
+    local buf = nx.buf.current()
+    local name = nx.buf.name(buf)
+    local k = name ~= "" and name or vim.fn.getcwd()
+    local saved_ensure, saved_schedule = git.ensure, git.schedule
+    git.ensure, git.schedule = function() end, function() end
+    git._cache[k] = { branch = "b", diff = { added = 12, changed = 0, removed = 1 } }
+
+    line.setup({
+      options = { globalstatus = true },
+      sections = { lualine_b = { "diff" } },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("%+12")
+    end)
+
+    local cells = compile._last.NxLineB
+    -- restore BEFORE asserting: a failure throws, and leaving the stubs installed would
+    -- break the git tests that follow.
+    git.ensure, git.schedule = saved_ensure, saved_schedule
+    git._cache[k] = nil
+
+    local neutral = highlights.section_group("b", "normal")
+    -- section b is a LEFT section: its cells are the component run followed by the
+    -- trailing powerline arrow, which is not part of this assertion.
+    nx.test.expect(cells[1].text).to_be(" ")
+    nx.test.expect(cells[1].hl).to_be(neutral)
+    nx.test.expect(cells[2].text).to_be(" +12 ")
+    nx.test.expect(cells[2].hl).to_be("DiffAdd")
+    nx.test.expect(cells[3].text).to_be(" -1 ")
+    nx.test.expect(cells[3].hl).to_be("DiffDelete")
+    nx.test.expect(cells[4].text).to_be(" ")
+    nx.test.expect(cells[4].hl).to_be(neutral)
+  end)
+
+  -- The same shape for the per-severity diagnostic counts.
+  nx.test.it("pads each diagnostic count in its own severity colour", function(t)
+    line.setup({
+      options = { globalstatus = true, icons_enabled = false },
+      sections = { lualine_b = { "diagnostics" } },
+    })
+    nudge(t)
+    local ns = vim.api.nvim_create_namespace("nxline_diag_pad_test")
+    nx.diagnostic.set(ns, 0, {
+      { lnum = 0, col = 0, severity = 1, message = "an error" },
+      { lnum = 1, col = 0, severity = 2, message = "a warning" },
+    })
+    line.refresh()
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("E:1")
+    end)
+
+    local cells = compile._last.NxLineB
+    local neutral = highlights.section_group("b", "normal")
+    nx.test.expect(cells[1].text).to_be(" ")
+    nx.test.expect(cells[1].hl).to_be(neutral)
+    nx.test.expect(cells[2].text).to_be(" E:1 ")
+    nx.test.expect(cells[2].hl).to_be("DiagnosticError")
+    nx.test.expect(cells[3].text).to_be(" W:1 ")
+    nx.test.expect(cells[3].hl).to_be("DiagnosticWarn")
+    nx.test.expect(cells[4].text).to_be(" ")
+    nx.test.expect(cells[4].hl).to_be(neutral)
+    nx.diagnostic.reset(ns, 0)
+  end)
+
+  -- A component-level `color` DOES own its padding (it colours the whole component, the
+  -- lualine semantics), so its pad must stay coloured rather than going neutral.
+  nx.test.it("a component-level color still covers its own padding", function(t)
+    line.setup({
+      options = { globalstatus = true },
+      sections = { lualine_b = { { "mode", color = { fg = "#00ff00" } } } },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+    local cells = compile._last.NxLineB
+    local neutral = highlights.section_group("b", "normal")
+    nx.test.expect(cells[1].text).to_be(" NORMAL ")
+    nx.test.expect(cells[1].hl).never.to_be(neutral)
   end)
 end)
 

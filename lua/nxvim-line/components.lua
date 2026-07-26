@@ -258,10 +258,10 @@ M.register("diagnostics", {
       end
     end
     local cells = {}
+    -- Padded on both sides in the severity's own colour, like the diff counts above.
     for i = 1, 4 do
       if counts[i] > 0 then
-        local prefix = #cells > 0 and " " or ""
-        cells[#cells + 1] = { text = prefix .. syms[i] .. counts[i], hl = DIAG_HL[i] }
+        cells[#cells + 1] = { text = " " .. syms[i] .. counts[i] .. " ", hl = DIAG_HL[i] }
       end
     end
     if #cells == 0 then
@@ -428,10 +428,14 @@ M.register("diff", {
       return nil
     end
     local cells = {}
+    -- Each count owns the space on BOTH sides of it, in its own colour: the gap between
+    -- two counts is then half one colour and half the other, so a background-coloured
+    -- Diff* group reads as an evenly padded block instead of one count's colour leaking
+    -- into the space before the next. (The component's OUTER padding stays neutral —
+    -- compile emits it as its own cell, see `pad_run`.)
     local function push(n, prefix, hl)
       if n > 0 then
-        local sep = #cells > 0 and " " or ""
-        cells[#cells + 1] = { text = sep .. prefix .. n, hl = hl }
+        cells[#cells + 1] = { text = " " .. prefix .. n .. " ", hl = hl }
       end
     end
     push(d.added, "+", "DiffAdd")

@@ -118,6 +118,40 @@ local function resolve_padding(comp, default)
   return default, default
 end
 
+-- Apply a component's `lpad`/`rpad` to its cell run, and return the pad cells that must be
+-- emitted OUTSIDE the run (nil when the pad was folded into an edge cell instead).
+--
+-- The padding belongs to the COMPONENT, not to whichever cell happens to sit at the run's
+-- edge. A cell carrying its own highlight (a per-kind `diff` count, a per-severity
+-- `diagnostics` count) must not stretch that colour into the gap that separates the
+-- component from its neighbour — with background-coloured Diff*/Diagnostic* groups that
+-- painted the leading gap in the FIRST count's colour, so the block leaked a space to the
+-- left. There the pad becomes its own uncoloured cell (the caller gives it the section
+-- group). It is folded into the edge cell only when that cell has no highlight of its own
+-- (it takes the section group either way), or when a component-level `color` is set —
+-- `color` covers the whole component including its padding, which is lualine's semantics.
+-- `inline` is that "the component owns its padding" verdict. The run is padded in place.
+local function pad_run(run, lpad, rpad, inline)
+  local lead, trail
+  if lpad > 0 then
+    if inline or run[1].hl == nil then
+      run[1].text = string.rep(" ", lpad) .. run[1].text
+    else
+      -- carry the click handler so the pad stays part of the component's click region
+      lead = { text = string.rep(" ", lpad), on_click = run[1].on_click }
+    end
+  end
+  if rpad > 0 then
+    local last = run[#run]
+    if inline or last.hl == nil then
+      last.text = last.text .. string.rep(" ", rpad)
+    else
+      trail = { text = string.rep(" ", rpad), on_click = last.on_click }
+    end
+  end
+  return lead, trail
+end
+
 -- A loud error cell, the no-silent-stub fallback when a component's own callback throws.
 local function error_cell(name)
   return { { text = "E:" .. name, hl = "ErrorMsg" } }
@@ -347,12 +381,18 @@ local function render_section(ctx, opts)
     end
     local lpad, rpad = resolve_padding(piece.comp, opts.padding)
     local run = piece.cells
-    -- pad in place so the cell keeps its other fields (hl, on_click); run[1] and run[#run]
-    -- are the same cell when the component is single-cell (lpad then rpad both apply).
-    run[1].text = string.rep(" ", lpad) .. run[1].text
-    run[#run].text = run[#run].text .. string.rep(" ", rpad)
+    -- pad_run folds the padding into the edge cells where it belongs to them (keeping
+    -- their hl / on_click) and hands back a neutral cell where it doesn't; emit() gives
+    -- those the section group.
+    local lead, trail = pad_run(run, lpad, rpad, piece.comp.color ~= nil)
+    if lead then
+      emit(lead)
+    end
     for _, c in ipairs(run) do
       emit(c)
+    end
+    if trail then
+      emit(trail)
     end
   end
 
@@ -676,10 +716,20 @@ function M._tabline()
         for _, comp in ipairs(comps) do
           local run = component_cells(comp, rctx)
           if #run > 0 then
-            run[1].text = " " .. run[1].text
-            run[#run].text = run[#run].text .. " "
-            for _, c in ipairs(run) do
+            -- the same padding rule as a statusline section (see `pad_run`), with the
+            -- tabline's fixed one-space padding
+            local lead, trail = pad_run(run, 1, 1, comp.color ~= nil)
+            local function part(c)
               parts[#parts + 1] = "%#" .. (c.hl or section_hl) .. "#" .. c.text:gsub("%%", "%%%%")
+            end
+            if lead then
+              part(lead)
+            end
+            for _, c in ipairs(run) do
+              part(c)
+            end
+            if trail then
+              part(trail)
             end
           end
         end
