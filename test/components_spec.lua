@@ -229,3 +229,115 @@ nx.test.describe("nxvim-line.git", function()
     nx.test.expect(cell).to_be_nil()
   end)
 end)
+
+-- A plugin surface (a file tree, a diff pane, a panel, the quickfix window, a terminal)
+-- is not a file, and the file-describing components have nothing true to say about it:
+-- its filetype is the widget's own tag, and it has no encoding and no line endings. They
+-- opt out declaratively with `file_only`, resolved against the CANONICAL editor signal —
+-- `'buftype'`, which the core reports as `nofile` for an `nx.view` — rather than by
+-- sniffing the buffer's name. The buffer's NAME still shows: that is what labels the pane.
+nx.test.describe("nxvim-line file-only components", function()
+  -- Build a view (the surface every plugin pane is made of) and focus it, so the global
+  -- bar renders against a `buftype = "nofile"` buffer.
+  -- Every view a test opens, torn down in after_each. Cleanup must NOT sit at the end of
+  -- each test: a failing assertion aborts the body, and a leaked view window then renders
+  -- the global bar for the wrong buffer, cascading failures through the whole suite.
+  local opened = {}
+
+  nx.test.after_each(function()
+    for _, vw in ipairs(opened) do
+      pcall(function()
+        vw:close()
+      end)
+    end
+    opened = {}
+    nx.layer.main()
+  end)
+
+  local function open_view(t, name)
+    local vw = nx.view.create({ name = name or "ourpane", filetype = "ourpane" })
+    opened[#opened + 1] = vw
+    vw:set_lines({ "one", "two" })
+    vw:mount({ split = "vsplit" })
+    vw:focus()
+    t:wait_for(function()
+      return nx.buf.current() == vw:bufnr()
+    end)
+    t:feed("<Esc>")
+    return vw
+  end
+
+  nx.test.it("reports a view as a non-file buffer via 'buftype'", function(t)
+    local vw = open_view(t)
+    -- The canonical signal, straight from the core — no name matching anywhere.
+    nx.test.expect(nx.bo[vw:bufnr()].buftype).to_be("nofile")
+    nx.test.expect(components.is_file_buffer(vw:bufnr())).to_be(false)
+    nx.test.expect(components.is_file_buffer(nx.buf.current())).to_be(false)
+  end)
+
+  nx.test.it("drops filetype / encoding / fileformat on a plugin surface", function(t)
+    line.setup({
+      options = { globalstatus = true },
+      sections = {
+        lualine_c = { "filename" },
+        lualine_x = { "encoding", "fileformat", "filetype" },
+      },
+    })
+    nudge(t)
+    -- On a real file buffer they all render.
+    local file_bar = t:wait_for(function()
+      local s = t:statusline()
+      return s:find("utf%-8") and s
+    end)
+    nx.test.expect(file_bar).to_contain("utf-8")
+
+    -- On the view: the name stays, the file-describing three are gone.
+    local vw = open_view(t)
+    local bar = t:wait_for(function()
+      local s = t:statusline()
+      return s:find("ourpane") and s
+    end)
+    nx.test.expect(bar).to_contain("ourpane") -- the pane's NAME still labels it
+    nx.test.expect(bar).never.to_contain("utf-8") -- encoding
+    nx.test.expect(bar).never.to_contain("unix") -- line endings
+  end)
+
+  nx.test.it("lets a component opt back in with file_only = false", function(t)
+    line.setup({
+      options = { globalstatus = true },
+      sections = { lualine_x = { { "encoding", file_only = false } } },
+    })
+    nudge(t)
+    local vw = open_view(t)
+    local bar = t:wait_for(function()
+      local s = t:statusline()
+      return s:find("utf%-8") and s
+    end)
+    nx.test.expect(bar).to_contain("utf-8")
+  end)
+
+  nx.test.it("lets a custom component opt IN with file_only = true", function(t)
+    components.register("mytag", {
+      events = { "BufEnter" },
+      provide = function()
+        return { text = "MYTAG" }
+      end,
+    })
+    line.setup({
+      options = { globalstatus = true },
+      sections = { lualine_x = { { "mytag", file_only = true } } },
+    })
+    nudge(t)
+    local on_file = t:wait_for(function()
+      local s = t:statusline()
+      return s:find("MYTAG") and s
+    end)
+    nx.test.expect(on_file).to_contain("MYTAG")
+
+    local vw = open_view(t)
+    t:wait_for(function()
+      return not t:statusline():find("MYTAG")
+    end)
+    nx.test.expect(t:statusline()).never.to_contain("MYTAG")
+  end)
+end)

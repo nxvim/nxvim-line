@@ -129,17 +129,19 @@ mode         The mode label (NORMAL / INSERT / VISUAL / …). The data
              `niR`) reads NORMAL, as in lualine — it IS Normal mode for
              that one command.
 branch       The current git branch (glyph + name). Async, cached.
+             file-only.
 diff         Added / changed / removed line counts vs HEAD, each a
              coloured sub-cell (DiffAdd / DiffChange / DiffDelete).
-             Async.
+             Async. file-only.
 diagnostics  Per-severity LSP counts, coloured with the editor's
              Diagnostic{Error,Warn,Info,Hint} groups. Opt `symbols`.
 filename     The buffer name (+ [+]/[-] flags). Opt `path` = 0 (tail,
              default) | 1 (relative to cwd) | 2 (absolute).
 filetype     The filetype, with its devicon (honours icons_enabled).
-encoding     'fileencoding'.
+             file-only.
+encoding     'fileencoding'. file-only.
 fileformat   The line-ending style — unix / dos / mac ('fileformat').
-             Opt `symbols` maps each to a glyph.
+             Opt `symbols` maps each to a glyph. file-only.
 progress     Top / Bot / NN% through the buffer.
 location     line:col.
 lsp          Attached LSP client names.
@@ -155,6 +157,34 @@ daemon       Remote-daemon link status (`nx.daemon.status()`) —
              (override the phase word).
 label        Static text: `{ "label", text = "…" }`. The building block
              for extension titles (see Extensions).
+```
+
+## File-only components
+
+A statusline is often rendered for something that is not a file: a file tree, a diff pane, the
+quickfix window, a terminal, any `nx.view` a plugin mounts. The components marked **file-only**
+above describe the *file* behind a buffer, and have nothing true to say about those surfaces — a
+tree has no encoding and no line endings, and its "filetype" is the widget's own tag rather than a
+language. They render nothing there. The buffer's NAME still shows: that is what labels the pane.
+
+The rule reads the editor's canonical signal, `'buftype'` — `""` for a real document, and the kind
+of the surface otherwise (`nofile` for an `nx.view`, `quickfix`, `terminal`). It is a plain buffer
+option, so nothing here is nxvim-line-specific; any statusline can key off the same thing:
+
+```lua
+if nx.bo[buf].buftype == "" then … end          -- a real file buffer
+require("nxvim-line.components").is_file_buffer(buf)  -- the same test, plus a validity check
+```
+
+Override it per component, either way:
+
+```lua
+sections = {
+  lualine_x = {
+    { "encoding", file_only = false },  -- force it on, even on a tree
+    { "mything", file_only = true },    -- opt a CUSTOM component out of plugin surfaces
+  },
+}
 ```
 
 An inline FUNCTION is also a component (lualine's spelling):

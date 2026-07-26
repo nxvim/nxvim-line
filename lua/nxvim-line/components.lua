@@ -42,6 +42,14 @@ end
 -- all, so a section is never speculatively rendered just to test it for emptiness.
 -- Declaring it on a component that CAN return nil would strand an arrow's background
 -- over a collapsed section, so leave it unset unless the component is unconditional.
+--
+-- `spec.file_only = true` declares that the component describes the FILE behind the
+-- buffer, so it renders nothing on a plugin surface (see `is_file_buffer`) — a file tree,
+-- a diff pane, the quickfix window, a terminal. `filetype` / `encoding` / `fileformat`
+-- set it: a tree has no encoding and no line endings, and its "filetype" is the widget's
+-- own tag rather than a language. A config entry overrides the default either way, so
+-- `{ "encoding", file_only = false }` forces it on everywhere and
+-- `{ "mything", file_only = true }` opts a custom component out of plugin surfaces.
 function M.register(name, spec)
   if type(name) ~= "string" then
     error("nxvim-line.register_component: name must be a string")
@@ -52,8 +60,31 @@ function M.register(name, spec)
   if spec.events ~= nil and type(spec.events) ~= "table" then
     error("nxvim-line.register_component: 'events' must be a list of event names")
   end
-  M._registry[name] =
-    { events = spec.events or {}, provide = spec.provide, always = spec.always == true }
+  M._registry[name] = {
+    events = spec.events or {},
+    provide = spec.provide,
+    always = spec.always == true,
+    file_only = spec.file_only == true,
+  }
+end
+
+-- is_file_buffer(buf) — is `buf` an actual file buffer, as opposed to a plugin surface?
+--
+-- The canonical editor signal, not a guess: `'buftype'` is `""` only for a real document
+-- (including a not-yet-saved `[No Name]`), and names the surface otherwise — `nofile` for
+-- an `nx.view` (a file tree, a diff pane, a dock panel), `quickfix`, `terminal`. Reading
+-- it here means the rule follows whatever the core models, instead of pattern-matching a
+-- buffer's NAME for `[…]`-style placeholders — a heuristic that breaks on a real file
+-- literally called `[foo]` and has to be re-invented by every component.
+--
+-- Any statusline, and any custom component, can key off the same thing: it is a plain
+-- buffer option (`nx.bo[buf].buftype`, neovim's `vim.bo[buf].buftype`), nothing
+-- nxvim-line-specific.
+--
+-- Validity is checked first: a debounced render can land a tick after the buffer went
+-- away (`:bd`, a closed panel), and reading an option off a dead handle must not throw.
+function M.is_file_buffer(buf)
+  return nx.buf.is_valid(buf) and nx.bo[buf].buftype == ""
 end
 
 function M.is_known(name)
@@ -170,6 +201,9 @@ M.register("filename", {
 -- section highlight. With icons disabled (`icons_enabled = false`) the name shows plain.
 M.register("filetype", {
   events = { "FileType", "BufEnter" },
+  -- A plugin surface's "filetype" is the widget's own tag (`nxtree`, `qf`), not a
+  -- language worth showing; see `is_file_buffer`.
+  file_only = true,
   provide = function(ctx)
     local ft = nx.bo[ctx.buf].filetype
     if not ft or ft == "" then
@@ -185,6 +219,8 @@ M.register("filetype", {
 
 M.register("encoding", {
   events = { "BufEnter", "BufReadPost" },
+  file_only = true, -- a plugin surface has no file, so no encoding
+
   provide = function(ctx)
     local enc = nx.bo[ctx.buf].fileencoding
     if not enc or enc == "" then
@@ -198,6 +234,8 @@ M.register("encoding", {
 -- glyph/label; otherwise the bare name shows.
 M.register("fileformat", {
   events = { "BufEnter", "BufReadPost", "BufWritePost" },
+  file_only = true, -- …and no line endings
+
   provide = function(ctx, opts)
     local ff = nx.bo[ctx.buf].fileformat
     if not ff or ff == "" then
@@ -407,6 +445,8 @@ local BRANCH_ICON = "\u{e0a0} "
 
 M.register("branch", {
   events = { "BufEnter", "TextChanged" },
+  file_only = true, -- a scratch panel must not inherit the session repo's branch
+
   provide = function(ctx)
     git.ensure(ctx.buf)
     local c = git.get(ctx.buf)
@@ -420,6 +460,8 @@ M.register("branch", {
 
 M.register("diff", {
   events = { "BufEnter", "TextChanged" },
+  file_only = true, -- likewise: no file, no diff against one
+
   provide = function(ctx)
     git.ensure(ctx.buf)
     local c = git.get(ctx.buf)

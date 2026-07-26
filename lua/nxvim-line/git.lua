@@ -55,12 +55,19 @@ end
 -- inherit the launch directory's branch. This is the neovim-idiomatic guard; before the
 -- core modelled `nofile`, `dir_of` saw a panel's slash-less placeholder name and fell
 -- back to `"."` (cwd), leaking the session's repo branch onto every scratch panel.
+--
+-- ONE definition, shared with the `file_only` component gate
+-- (`components.is_file_buffer`): this fetch-time guard and the render-time skip must
+-- agree, or a surface renders nothing while still paying for the git fetch behind it.
+-- Required lazily — components.lua requires THIS module at load time, so a top-level
+-- require here would close the cycle.
 local function is_git_buffer(buf)
-  -- A debounced refresh lands a tick or more after it was scheduled, by which time the
-  -- buffer may be gone (`:bd`, a closed panel). Validity is checked here rather than at
-  -- each call site so no path can resolve `nx.buf.name` on a dead buffer and fall back
-  -- to cwd — which would fetch the SESSION's branch under a key nothing displays.
-  return nx.buf.is_valid(buf) and nx.bo[buf].buftype == ""
+  -- Validity is checked inside `is_file_buffer` rather than at each call site: a debounced
+  -- refresh lands a tick or more after it was scheduled, by which time the buffer may be
+  -- gone (`:bd`, a closed panel), and no path may then resolve `nx.buf.name` on a dead
+  -- handle and fall back to cwd — which would fetch the SESSION's branch under a key
+  -- nothing displays.
+  return require("nxvim-line.components").is_file_buffer(buf)
 end
 
 function M.get(buf)

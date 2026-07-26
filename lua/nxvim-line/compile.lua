@@ -173,6 +173,22 @@ local function component_cells(comp, ctx)
     end
   end
 
+  -- `file_only`: a component describing the FILE behind the buffer renders nothing on a
+  -- plugin surface (a tree, a diff pane, quickfix, a terminal) — see
+  -- `components.is_file_buffer`, which reads the core's `'buftype'`. The config entry wins
+  -- over the registry default, so `file_only = false` forces a component on everywhere and
+  -- `true` opts a custom one out. Resolved here rather than inside each `provide` so the
+  -- rule is one line, works for custom and inline components too, and keeps the
+  -- section-emptiness logic (powerline arrows) agreeing with what actually renders.
+  local file_only = comp.file_only
+  if file_only == nil and not comp._inline then
+    local spec = components.get(comp.name)
+    file_only = spec and spec.file_only
+  end
+  if file_only and not components.is_file_buffer(ctx.buf) then
+    return {}
+  end
+
   -- An inline-function component (`{ function() … end }`): the function returns the text
   -- (a string) or cell(s); everything else (fmt/icon/color/on_click) applies on top.
   local run
