@@ -4,7 +4,8 @@ A fully-featured, **lualine-style** statusline for [nxvim](https://github.com/da
 
 Configure it the way you'd configure `lualine.nvim` — sections `a`–`z`, a rich component
 library (mode, branch, diff, diagnostics, filename, filetype + icons, fileformat,
-encoding, progress, location, LSP, searchcount, daemon), themes that recolour by mode, and
+encoding, progress, location, LSP clients + their `$/progress` status, searchcount,
+daemon), themes that recolour by mode, and
 powerline separators:
 
 ```lua

@@ -16,6 +16,7 @@
 
 local git = require("nxvim-line.git")
 local icons = require("nxvim-line.icons")
+local lspprogress = require("nxvim-line.lspprogress")
 
 local M = {}
 
@@ -320,9 +321,54 @@ M.register("diagnostics", {
 
 -- ----- lsp -------------------------------------------------------------------
 
+-- Truncate a server-authored string to `max` display-ish characters (byte-counted;
+-- these are paths and counters, near always ASCII), marking the cut with an ellipsis.
+--
+-- The bound is not cosmetic: `message` is whatever the SERVER decided to send, and a
+-- long one (a full absolute path per file, which rust-analyzer and gopls both emit)
+-- would push every other section off the bar for the duration of an index. A
+-- statusline component must be bounded by something the editor controls.
+local function clip(s, max)
+  if type(s) ~= "string" or #s <= max then
+    return s
+  end
+  return s:sub(1, math.max(1, max - 1)) .. "\u{2026}"
+end
+
+-- One task rendered as `<spinner> <title> <message> <pct>%` — whichever of those the
+-- server actually gave. A task with no percentage is indeterminate (the spinner IS
+-- the progress); one with no title came from a server that reported without
+-- beginning, and shows its message alone rather than a bare spinner.
+local function progress_text(task, opts)
+  local parts = { lspprogress.frame(opts and opts.spinner) }
+  if task.title ~= "" then
+    parts[#parts + 1] = task.title
+  end
+  if task.message then
+    parts[#parts + 1] = clip(task.message, (opts and opts.max_message) or 30)
+  end
+  if task.percentage then
+    parts[#parts + 1] = task.percentage .. "%"
+  end
+  return table.concat(parts, " ")
+end
+
+-- The LSP clients attached to the buffer, plus what they are BUSY with — lualine's
+-- `lsp_status`. Names alone answer "is a server attached"; the progress half answers
+-- "is it ready yet", which is the question during the first seconds in a large
+-- project, and the one a bare name list silently gets wrong (an indexing server looks
+-- identical to a finished one).
+--
+-- Progress is filtered to THIS buffer's clients (`nx.lsp.progress({ bufnr })`): a
+-- server busy in another project's window is not this buffer's status. Only the
+-- first task renders, with `(+N)` for the rest — a server may run several at once
+-- (rust-analyzer routinely does) and rendering them all would be unbounded.
+--
+-- Opts: `progress = false` for names only; `spinner` replaces the frame list;
+-- `max_message` (default 30) bounds the server's detail line.
 M.register("lsp", {
-  events = { "LspAttach", "BufEnter" },
-  provide = function(ctx)
+  events = { "LspAttach", "LspDetach", "LspProgress", "BufEnter" },
+  provide = function(ctx, opts)
     local names = {}
     for _, c in ipairs(nx.lsp.clients({ bufnr = ctx.buf }) or {}) do
       if c.name then
@@ -332,7 +378,17 @@ M.register("lsp", {
     if #names == 0 then
       return nil
     end
-    return { text = table.concat(names, ",") }
+    local text = table.concat(names, ",")
+    if not (opts and opts.progress == false) then
+      local tasks = nx.lsp.progress({ bufnr = ctx.buf })
+      if #tasks > 0 then
+        text = text .. " " .. progress_text(tasks[1], opts)
+        if #tasks > 1 then
+          text = text .. " (+" .. (#tasks - 1) .. ")"
+        end
+      end
+    end
+    return { text = text }
   end,
 })
 

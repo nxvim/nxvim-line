@@ -21,6 +21,7 @@ local config = require("nxvim-line.config")
 local components = require("nxvim-line.components")
 local git = require("nxvim-line.git")
 local icons = require("nxvim-line.icons")
+local lspprogress = require("nxvim-line.lspprogress")
 local highlights = require("nxvim-line.highlights")
 local themes = require("nxvim-line.themes")
 local extensions = require("nxvim-line.extensions")
@@ -458,6 +459,18 @@ local function has_git(comps)
   return false
 end
 
+-- Does a section list render LSP progress — i.e. hold an `lsp` component that hasn't
+-- opted out of its progress half? Only such a layout arms the spinner clock; a bar
+-- with no `lsp` component (or `{ "lsp", progress = false }`) never wakes it.
+local function has_spinner(comps)
+  for _, comp in ipairs(comps) do
+    if comp.name == "lsp" and comp.progress ~= false then
+      return true
+    end
+  end
+  return false
+end
+
 -- Non-empty?
 local function nonempty(list)
   return type(list) == "table" and #list > 0
@@ -548,6 +561,7 @@ local function make_section(cfg, sec, side, sep_glyph, component_sep, ctx)
     opts = opts,
     both = both,
     has_git = has_git(both),
+    has_spinner = has_spinner(both),
   }
 end
 
@@ -556,7 +570,7 @@ end
 -- chain's (so the mode block re-renders when the git branch appears/disappears, moving
 -- its arrow's target). `is_git` folds in a neighbour's git dependence so a git data update
 -- invalidates this section too, not only the section the branch text lives in.
-local function register_section(b, events_both, is_git, out, git_segs)
+local function register_section(b, events_both, is_git, is_spinner, out, git_segs, spin_segs)
   local segname, opts = b.segname, b.opts
   nx.statusline.segment({
     name = segname,
@@ -574,6 +588,9 @@ local function register_section(b, events_both, is_git, out, git_segs)
   if is_git then
     git_segs[#git_segs + 1] = segname
   end
+  if is_spinner then
+    spin_segs[#spin_segs + 1] = segname
+  end
 end
 
 -- Build one half's segments with powerline adjacency. Left sections arrow INTO the next
@@ -583,7 +600,17 @@ end
 -- no diagnostics) is skipped and the arrow reaches the first non-empty section — or the
 -- fill — with no stranded background. Adjacency is over the active base layout (the only
 -- one that draws arrows). `ctx = { exts, disabled }`.
-local function build_side(config, keys, side, sep_glyph, component_sep, ctx, out, git_segs)
+local function build_side(
+  config,
+  keys,
+  side,
+  sep_glyph,
+  component_sep,
+  ctx,
+  out,
+  git_segs,
+  spin_segs
+)
   local segs = any_present(config, keys, ctx.exts)
   local active = active_present(config, keys)
   -- map a section key → its index among the ACTIVE present sections of this half
@@ -609,6 +636,7 @@ local function build_side(config, keys, side, sep_glyph, component_sep, ctx, out
       events_both[#events_both + 1] = c
     end
     local is_git = b.has_git
+    local is_spinner = b.has_spinner
     if i then
       local chain = {}
       -- NOT the `cond and a or b` idiom — the outward step lands past the array end for an
@@ -623,11 +651,12 @@ local function build_side(config, keys, side, sep_glyph, component_sep, ctx, out
           events_both[#events_both + 1] = c
         end
         is_git = is_git or nb.has_git
+        is_spinner = is_spinner or nb.has_spinner
         j = j + step
       end
       b.opts.neighbor_chain = chain
     end
-    register_section(b, events_both, is_git, out, git_segs)
+    register_section(b, events_both, is_git, is_spinner, out, git_segs, spin_segs)
   end
 end
 
@@ -829,8 +858,9 @@ function M.build(config)
   M._last_win = {}
   local left, right = {}, {}
   local git_segs = {}
-  build_side(config, LEFT, "left", ss.left, cs.left, bctx, left, git_segs)
-  build_side(config, RIGHT, "right", ss.right, cs.right, bctx, right, git_segs)
+  local spin_segs = {}
+  build_side(config, LEFT, "left", ss.left, cs.left, bctx, left, git_segs, spin_segs)
+  build_side(config, RIGHT, "right", ss.right, cs.right, bctx, right, git_segs, spin_segs)
 
   build_tabline(config)
 
@@ -858,6 +888,20 @@ function M.build(config)
     end)
   else
     git.deactivate()
+  end
+
+  -- Same shape for the LSP spinner: only a layout that actually renders progress arms
+  -- the frame clock, and it invalidates just the hosting segments. (The DATA already
+  -- rides `LspProgress` through the segment's declared events — this is the animation
+  -- between a server's reports.)
+  if #spin_segs > 0 then
+    lspprogress.activate(function()
+      for _, s in ipairs(spin_segs) do
+        nx.statusline.invalidate(s)
+      end
+    end)
+  else
+    lspprogress.deactivate()
   end
 
   start_refresh(config.options.refresh)

@@ -150,8 +150,13 @@ fileformat   The line-ending style — unix / dos / mac ('fileformat').
              Opt `symbols` maps each to a glyph. file-only.
 progress     Top / Bot / NN% through the buffer.
 location     line:col.
-lsp          Attached LSP client names. In the default lualine_x;
-             renders nothing when no client is attached.
+lsp          Attached LSP client names, plus what those servers are
+             busy with (a spinner, the task title, its detail line
+             and percentage — lualine's `lsp_status`). In the default
+             lualine_x; renders nothing when no client is attached.
+             Opts `progress` = false (names only), `spinner` (a list
+             of frames), `max_message` (default 30). See the notes
+             below.
 searchcount  `[idx/total]` of the last search pattern (the `/`
              register), like vim's searchcount(). Bounded by
              `opts.maxcount` (default 99; beyond it the total shows
@@ -202,6 +207,35 @@ event.
 No components are deferred today. The deferred mechanism remains: a component gated on a missing
 editor primitive is registered as deferred, so naming it in `sections` errors loud with the reason
 rather than rendering nothing.
+
+## lsp notes
+
+The `lsp` component answers two different questions. The client **names** answer "is a server
+attached"; the **progress** half answers "is it ready yet" — the question that matters in the first
+seconds in a large project, and the one a bare name list silently gets wrong, since an indexing
+server looks identical to a finished one.
+
+Progress comes from `nx.lsp.progress({ bufnr })`, the editor's mirror of the servers'
+`$/progress` reports, and every update fires the `LspProgress` autocmd, which invalidates the
+section. Two bounds keep a server from taking over the bar:
+
+- Only the **first** task renders, with `(+N)` for the rest. A server may run several at once
+  (rust-analyzer routinely does), so rendering them all would be unbounded.
+- The task's `message` is server-authored and unbounded — rust-analyzer and gopls both send a full
+  path per file — so it is clipped to `max_message` (default 30) with an ellipsis.
+
+Progress is filtered to the buffer's **own** clients: a server busy in another project's window is
+not this buffer's status.
+
+The spinner frames are plain Unicode braille (not a Nerd Font glyph), so they are NOT gated on
+`icons_enabled`; pass `spinner = { … }` to replace the list. The frame clock runs **only while some
+task is in flight** — armed on the first `LspProgress`, and it stops itself the moment nothing is
+running. A layout with no `lsp` component (or with `progress = false`) never arms it at all.
+
+```lua
+sections = { lualine_x = { { "lsp", progress = false } } }  -- names only
+sections = { lualine_x = { { "lsp", spinner = { "-", "\\", "|", "/" }, max_message = 12 } } }
+```
 
 ## searchcount notes
 

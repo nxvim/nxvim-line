@@ -93,6 +93,96 @@ nx.test.describe("nxvim-line.components", function()
     nx.test.expect(cell).to_be_nil()
   end)
 
+  -- The LSP mirrors (`nx.lsp._clients` / `_attached` / `_progress`) are what the
+  -- editor pushes and `nx.lsp.clients()` / `nx.lsp.progress()` read, so driving them
+  -- directly exercises the component against exactly the shape a real server produces
+  -- — hermetically, with no language server in the test session. Restored after each
+  -- test, since they are process-global.
+  local function fake_lsp(buf, name, tasks)
+    nx.lsp._clients[901] = { id = 901, name = name }
+    nx.lsp._attached[buf] = { [901] = true }
+    nx.lsp._progress[901] = tasks
+  end
+
+  local function clear_lsp(buf)
+    nx.lsp._clients[901] = nil
+    nx.lsp._attached[buf] = nil
+    nx.lsp._progress[901] = nil
+  end
+
+  local function lsp_text(buf, opts)
+    local cell = components.get("lsp").provide({ buf = buf, win = nx.win.current() }, opts)
+    return cell and cell.text or nil
+  end
+
+  -- Names alone can't answer "is it ready yet" — an indexing server looks identical to
+  -- a finished one. The progress half is what makes the difference visible.
+  nx.test.it("lsp shows the attached name plus what the server is busy with", function()
+    local buf = nx.buf.current()
+    fake_lsp(buf, "lua_ls", {
+      { token = "t1", title = "Indexing", message = "3/10", percentage = 30 },
+    })
+    local text = lsp_text(buf)
+    clear_lsp(buf)
+    nx.test.expect(text).to_contain("lua_ls")
+    nx.test.expect(text).to_contain("Indexing")
+    nx.test.expect(text).to_contain("3/10")
+    nx.test.expect(text).to_contain("30%")
+  end)
+
+  nx.test.it("lsp progress = false renders names only", function()
+    local buf = nx.buf.current()
+    fake_lsp(buf, "lua_ls", { { token = "t1", title = "Indexing", percentage = 30 } })
+    local text = lsp_text(buf, { progress = false })
+    clear_lsp(buf)
+    nx.test.expect(text).to_be("lua_ls")
+  end)
+
+  -- `message` is server-authored and unbounded — rust-analyzer and gopls both send a
+  -- full path per file. Unclipped it would push every other section off the bar for
+  -- the whole index.
+  nx.test.it("lsp clips a long progress message", function()
+    local buf = nx.buf.current()
+    local long = string.rep("a", 200)
+    fake_lsp(buf, "lua_ls", { { token = "t1", title = "Indexing", message = long } })
+    local text = lsp_text(buf, { max_message = 10 })
+    clear_lsp(buf)
+    nx.test.expect(#text < 60).to_be(true)
+    nx.test.expect(text).to_contain("\u{2026}") -- the ellipsis marking the cut
+    nx.test.expect(text:find(string.rep("a", 20), 1, true)).to_be_nil()
+  end)
+
+  -- A server may run several tokens at once (rust-analyzer routinely does); rendering
+  -- them all would be unbounded, so the rest are counted.
+  nx.test.it("lsp counts the concurrent tasks it doesn't render", function()
+    local buf = nx.buf.current()
+    fake_lsp(buf, "rust_analyzer", {
+      { token = "t1", title = "Indexing" },
+      { token = "t2", title = "Building" },
+      { token = "t3", title = "Loading" },
+    })
+    local text = lsp_text(buf)
+    clear_lsp(buf)
+    nx.test.expect(text).to_contain("Indexing")
+    nx.test.expect(text).to_contain("(+2)")
+    nx.test.expect(text:find("Building", 1, true)).to_be_nil()
+  end)
+
+  -- A server busy in another project's window is not THIS buffer's status: the
+  -- component filters progress by the buffer's own clients, like the name list.
+  nx.test.it("lsp ignores progress from a client not attached to the buffer", function()
+    local buf = nx.buf.current()
+    fake_lsp(buf, "lua_ls", nil)
+    -- A second client, busy, but attached to nothing.
+    nx.lsp._clients[902] = { id = 902, name = "elsewhere" }
+    nx.lsp._progress[902] = { { token = "x", title = "Indexing" } }
+    local text = lsp_text(buf)
+    nx.lsp._clients[902] = nil
+    nx.lsp._progress[902] = nil
+    clear_lsp(buf)
+    nx.test.expect(text).to_be("lua_ls")
+  end)
+
   nx.test.it("daemon colours the connection phase and hides on a local session", function()
     -- Pure: drive `nx.daemon.status()` through its mirror and assert the per-phase colour.
     local daemon = components.get("daemon")
@@ -363,5 +453,61 @@ nx.test.describe("nxvim-line file-only components", function()
       return not t:statusline():find("MYTAG")
     end)
     nx.test.expect(t:statusline()).never.to_contain("MYTAG")
+  end)
+end)
+
+-- The spinner clock: the DATA rides `LspProgress` through the segment's declared
+-- events, so the timer exists only to animate BETWEEN a server's reports — and it
+-- must exist only while there is something to animate. A permanently-armed wakeup for
+-- a bar that is idle nearly all the time is exactly the per-event cost the editor's
+-- never-freeze rule forbids.
+nx.test.describe("nxvim-line.lspprogress", function()
+  local lspprogress = require("nxvim-line.lspprogress")
+
+  local function set_progress(tasks)
+    nx.lsp._clients[903] = tasks and { id = 903, name = "spin_ls" } or nil
+    nx.lsp._progress[903] = tasks
+  end
+
+  nx.test.it("stays idle when no server is busy", function(t)
+    set_progress(nil)
+    local ticks = 0
+    lspprogress.activate(function()
+      ticks = ticks + 1
+    end)
+    nx.test.expect(lspprogress.busy()).to_be(false)
+    nx.test.expect(lspprogress._ticking).to_be(false)
+    -- Fire the event with nothing in flight: still nothing to animate.
+    nx.autocmd.exec("LspProgress", { pattern = "end" })
+    t:sleep(250)
+    lspprogress.deactivate()
+    nx.test.expect(ticks).to_be(0)
+  end)
+
+  nx.test.it("animates while a task runs and stops itself when it ends", function(t)
+    set_progress({ { token = "t1", title = "Indexing" } })
+    local ticks = 0
+    lspprogress.activate(function()
+      ticks = ticks + 1
+    end)
+    -- activate() picks up work already in flight (a config reload mid-index), so the
+    -- clock is running without waiting for the server's next report.
+    t:wait_for(function()
+      return ticks > 0
+    end)
+    local frame_a = lspprogress.frame()
+    t:wait_for(function()
+      return lspprogress.frame() ~= frame_a
+    end)
+
+    -- The task ends: the next tick sees an empty list and retires the loop.
+    set_progress(nil)
+    t:wait_for(function()
+      return lspprogress._ticking == false
+    end)
+    local after = ticks
+    t:sleep(250)
+    lspprogress.deactivate()
+    nx.test.expect(ticks).to_be(after) -- no wakeups once the work is gone
   end)
 end)
