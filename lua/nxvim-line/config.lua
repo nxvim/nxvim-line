@@ -26,8 +26,12 @@ end
 -- parts a phase implements are *consumed*: Phase 1 uses `sections` + `globalstatus`.
 -- The rest (`theme`, separators, `refresh`, `disabled_filetypes`, `inactive_sections`,
 -- `tabline`, `extensions`) are accepted and validated so a complete lualine-style
--- config never errors, and are wired in later phases. The default sections use only
--- the components that exist in Phase 1.
+-- config never errors, and are wired in later phases.
+--
+-- The default `sections` are lualine's own, plus `lsp` leading `lualine_x`: nxvim ships
+-- LSP in the box, so the attached server belongs on the default bar, and the component
+-- collapses to nothing when no client is attached — a buffer with no server looks
+-- exactly as it did before.
 local DEFAULTS = {
   options = {
     theme = "auto",
@@ -45,7 +49,7 @@ local DEFAULTS = {
     lualine_a = { "mode" },
     lualine_b = { "branch", "diff", "diagnostics" },
     lualine_c = { "filename" },
-    lualine_x = { "encoding", "fileformat", "filetype" },
+    lualine_x = { "lsp", "encoding", "fileformat", "filetype" },
     lualine_y = { "progress" },
     lualine_z = { "location" },
   },

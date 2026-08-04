@@ -29,6 +29,30 @@ nx.test.describe("nxvim-line.components", function()
     nx.test.expect(sl).to_contain("[+]")
   end)
 
+  -- The default `path` is 1 (relative to cwd), not lualine's bare tail: two buffers
+  -- named `mod.rs` are indistinguishable by tail alone. `path = 0` still opts back in,
+  -- and the 0 must survive the `or`-default (0 is truthy in Lua, so it does).
+  nx.test.it("filename defaults to the cwd-relative path, not the tail", function(t)
+    local dir = nx.test.tempdir()
+    nx.await(nx.fs.mkdir(dir .. "/sub"))
+    nx.await(nx.fs.write(dir .. "/sub/deep.txt", "hi\n"))
+    line.setup({ options = { globalstatus = true }, sections = { lualine_c = { "filename" } } })
+    t:feed(":cd " .. dir .. "<CR>")
+    t:feed(":edit sub/deep.txt<CR>")
+    local sl = t:wait_for(function()
+      local s = t:statusline()
+      return s:find("sub/deep%.txt") and s
+    end)
+    nx.test.expect(sl).to_contain("sub/deep.txt")
+
+    -- and an explicit `path = 0` still renders the tail alone
+    local cell = components.get("filename").provide({
+      buf = nx.buf.current(),
+      win = nx.win.current(),
+    }, { path = 0 })
+    nx.test.expect(cell.text).to_be("deep.txt")
+  end)
+
   nx.test.it("encoding shows the file encoding", function(t)
     line.setup({ options = { globalstatus = true }, sections = { lualine_x = { "encoding" } } })
     nudge(t)

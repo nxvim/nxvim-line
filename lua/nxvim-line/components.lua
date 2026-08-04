@@ -161,15 +161,24 @@ M.register("mode", {
 
 -- ----- filename --------------------------------------------------------------
 
--- opts.path: 0 = tail (default), 1 = relative to cwd, 2 = absolute. The modified /
+-- opts.path: 0 = tail, 1 = relative to cwd (default), 2 = absolute. The modified /
 -- nomodifiable flags ride along ([+] / [-]).
+--
+-- The default is the cwd-relative path, NOT lualine's bare tail: two open buffers
+-- called `mod.rs` are indistinguishable by tail alone, which is the common case in
+-- any tree-structured project. Relative rather than absolute keeps the bar short —
+-- the leading `/home/you/work/proj/` is the same for every buffer in the session and
+-- carries no information. A file outside the cwd still shows its absolute path (there
+-- is no relative form to fall back to), and `path = 0` restores the tail.
 M.register("filename", {
   events = { "BufEnter", "BufWritePost", "TextChanged", "InsertLeave" },
   always = true, -- an unnamed buffer still shows "[No Name]"
   provide = function(ctx, opts)
     local buf = ctx.buf
     local name = nx.buf.name(buf)
-    local path_mode = (opts and opts.path) or 0
+    -- `or` is the right selector here even with a 0 default value: 0 is truthy in
+    -- Lua, so an explicit `path = 0` survives and only nil falls through.
+    local path_mode = (opts and opts.path) or 1
     local shown
     if name == "" then
       shown = "[No Name]"

@@ -23,6 +23,18 @@ nx.test.describe("nxvim-line.config", function()
     nx.test.expect(cfg.options.theme).to_be("auto")
   end)
 
+  -- `lsp` leads the default `lualine_x`: nxvim ships LSP in the box, so the attached
+  -- server is on the bar without any config. It collapses to nothing with no client
+  -- attached, so a server-less buffer is unchanged.
+  nx.test.it("ships lsp first in the default lualine_x", function()
+    local cfg = config.merge(config.defaults(), {})
+    local names = {}
+    for i, c in ipairs(cfg.sections.lualine_x) do
+      names[i] = c.name
+    end
+    nx.test.expect(table.concat(names, ",")).to_be("lsp,encoding,fileformat,filetype")
+  end)
+
   nx.test.it("replaces a section wholesale, leaves others at default", function()
     local cfg = config.merge(config.defaults(), {
       sections = { lualine_c = { "filetype", "location" } },

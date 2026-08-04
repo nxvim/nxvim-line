@@ -14,7 +14,7 @@ require("nxvim-line").setup({
     lualine_a = { "mode" },
     lualine_b = { "branch", "diff", "diagnostics" },
     lualine_c = { "filename" },
-    lualine_x = { "encoding", "filetype" },
+    lualine_x = { "lsp", "encoding", "fileformat", "filetype" },
     lualine_y = { "progress" },
     lualine_z = { "location" },
   },
@@ -92,6 +92,11 @@ layout. Both take the six lualine section keys — `lualine_a` / `b` / `c` (left
 `lualine_x` / `y` / `z` (right half) — each a list of components. A user `sections` entry REPLACES
 that section's default wholesale (lualine semantics); unspecified sections keep their defaults.
 
+The default `sections` are the snippet at the top of this page: lualine's own defaults, plus `lsp`
+leading `lualine_x`. nxvim ships LSP in the box, so the attached server is on the bar with no
+config at all; the component renders nothing when no client is attached, so a buffer with no
+server looks exactly as it would without it.
+
 Those six are the ONLY valid keys. Any other key is a hard error naming it, in `sections`,
 `inactive_sections`, and `tabline` alike — a typo (`lualine_d`) would otherwise drop every component
 in it while the config still looked accepted, leaving a silently wrong bar.
@@ -135,8 +140,9 @@ diff         Added / changed / removed line counts vs HEAD, each a
              Async. file-only.
 diagnostics  Per-severity LSP counts, coloured with the editor's
              Diagnostic{Error,Warn,Info,Hint} groups. Opt `symbols`.
-filename     The buffer name (+ [+]/[-] flags). Opt `path` = 0 (tail,
-             default) | 1 (relative to cwd) | 2 (absolute).
+filename     The buffer name (+ [+]/[-] flags). Opt `path` = 0 (tail)
+             | 1 (relative to cwd, the default) | 2 (absolute). A
+             file outside the cwd shows absolute under 1.
 filetype     The filetype, with its devicon (honours icons_enabled).
              file-only.
 encoding     'fileencoding'. file-only.
@@ -144,7 +150,8 @@ fileformat   The line-ending style — unix / dos / mac ('fileformat').
              Opt `symbols` maps each to a glyph. file-only.
 progress     Top / Bot / NN% through the buffer.
 location     line:col.
-lsp          Attached LSP client names.
+lsp          Attached LSP client names. In the default lualine_x;
+             renders nothing when no client is attached.
 searchcount  `[idx/total]` of the last search pattern (the `/`
              register), like vim's searchcount(). Bounded by
              `opts.maxcount` (default 99; beyond it the total shows
