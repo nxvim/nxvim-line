@@ -211,7 +211,9 @@ rather than rendering nothing.
 ## lsp notes
 
 The `lsp` component answers two different questions. The client **names** answer "is a server
-attached"; the **progress** half answers "is it ready yet" — the question that matters in the first
+attached" — space-separated, since two servers on one buffer is the ordinary case (`pyright ruff`,
+`ts_ls eslint`) and a comma would read as one compound name. The **progress** half answers "is it
+ready yet" — the question that matters in the first
 seconds in a large project, and the one a bare name list silently gets wrong, since an indexing
 server looks identical to a finished one.
 

@@ -378,7 +378,9 @@ M.register("lsp", {
     if #names == 0 then
       return nil
     end
-    local text = table.concat(names, ",")
+    -- Space-separated, not comma: a comma reads as one compound name
+    -- (`pyright,ruff`), while spacing lets each server stand as its own word.
+    local text = table.concat(names, " ")
     if not (opts and opts.progress == false) then
       local tasks = nx.lsp.progress({ bufnr = ctx.buf })
       if #tasks > 0 then

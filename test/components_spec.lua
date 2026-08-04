@@ -130,6 +130,21 @@ nx.test.describe("nxvim-line.components", function()
     nx.test.expect(text).to_contain("30%")
   end)
 
+  -- Two servers on one buffer is the ordinary case (pyright + ruff, ts_ls + eslint).
+  -- Space-separated so each reads as its own word; a comma reads as one compound name.
+  nx.test.it("lsp separates several client names with a space", function()
+    local buf = nx.buf.current()
+    nx.lsp._clients[901] = { id = 901, name = "pyright" }
+    nx.lsp._clients[902] = { id = 902, name = "ruff" }
+    nx.lsp._attached[buf] = { [901] = true, [902] = true }
+    local text = lsp_text(buf)
+    nx.lsp._clients[901], nx.lsp._clients[902] = nil, nil
+    nx.lsp._attached[buf] = nil
+    -- `nx.lsp.clients` walks a hash set, so the order is not fixed — assert the
+    -- SEPARATOR, which is what this test is about.
+    nx.test.expect(text == "pyright ruff" or text == "ruff pyright").to_be(true)
+  end)
+
   nx.test.it("lsp progress = false renders names only", function()
     local buf = nx.buf.current()
     fake_lsp(buf, "lua_ls", { { token = "t1", title = "Indexing", percentage = 30 } })
