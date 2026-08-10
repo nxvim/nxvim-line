@@ -136,9 +136,10 @@ mode         The mode label (NORMAL / INSERT / VISUAL / …). The data
 branch       The current git branch (glyph + name). Async, cached.
              file-only.
 diff         Added / changed / removed line counts vs HEAD, each a
-             coloured sub-cell (DiffAdd / DiffChange / DiffDelete).
+             coloured sub-cell (Added / Changed / Removed, falling back
+             to Diff{Added,Add} … and finally the theme's own hue).
              Async. file-only.
-diagnostics  Per-severity LSP counts, coloured with the editor's
+diagnostics  Per-severity LSP counts, coloured from the editor's
              Diagnostic{Error,Warn,Info,Hint} groups. Opt `symbols`.
 filename     The buffer name (+ [+]/[-] flags). Opt `path` = 0 (tail)
              | 1 (relative to cwd, the default) | 2 (absolute). A
@@ -261,7 +262,8 @@ color = …       Override the cell highlight. Either a highlight-group NAME
                 (string), or a table
                 `{ fg = , bg = , gui = "bold,italic" }` (interned as a
                 generated group). Opts the component out of the mode
-                palette.
+                palette. A colour naming no `bg` keeps the section's
+                background; one that names a `bg` is used whole.
 padding = 1     Spaces around the component: a number (both sides) or
                 `{ left = , right = }`. This padding takes the SECTION
                 highlight when the component's edge cell carries one of
@@ -416,6 +418,13 @@ line.setup({
 `ctx = { buf, win, focused }`. A cell's `hl` is a highlight-group name; omit it to inherit the
 section's mode colour. Return a list of cells to colour parts independently (as `diff` /
 `diagnostics` do).
+
+A cell `hl` that names no BACKGROUND of its own is painted over the surrounding section's
+background — a highlight group is whole, and what it leaves unset a client fills from the bar's
+`StatusLine`, not from the section, so a foreground-only group (`DiagnosticError` and most other
+semantic groups) would otherwise render its cell as a block of the wrong colour wherever a theme's
+section background differs from `StatusLine`'s. A group that DOES name a background is left alone:
+it means to paint a block, and the block is the point.
 
 A spec may also carry `always = true`, declaring that `provide` NEVER returns nothing (as `mode`,
 `filename`, `location`, and `progress` do). It is purely an optimization: resolving where a

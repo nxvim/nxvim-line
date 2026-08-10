@@ -23,6 +23,11 @@ local highlights = require("nxvim-line.highlights")
 local git = require("nxvim-line.git")
 local icons = require("nxvim-line.icons")
 
+-- The concrete colours a cell's highlight group resolves to (through any link).
+local function hl_of(name)
+  return nx.hl.get(0, { name = name, link = false })
+end
+
 local function nudge(t)
   t:feed("<Esc>")
 end
@@ -261,6 +266,10 @@ nx.test.describe("nxvim-line.own-highlight padding", function()
     local saved_ensure, saved_schedule = git.ensure, git.schedule
     git.ensure, git.schedule = function() end, function() end
     git._cache[k] = { branch = "b", diff = { added = 12, changed = 0, removed = 1 } }
+    -- The bare test session loads no colorscheme: give the counts the foregrounds a real
+    -- one would, so each is identifiable by colour below.
+    nx.hl.define(0, "Added", { fg = "#00ff00" })
+    nx.hl.define(0, "Removed", { fg = "#ff0000" })
 
     line.setup({
       options = { globalstatus = true },
@@ -283,15 +292,17 @@ nx.test.describe("nxvim-line.own-highlight padding", function()
     nx.test.expect(cells[1].text).to_be(" ")
     nx.test.expect(cells[1].hl).to_be(neutral)
     nx.test.expect(cells[2].text).to_be(" +12 ")
-    nx.test.expect(cells[2].hl).to_be("DiffAdd")
+    nx.test.expect(hl_of(cells[2].hl).fg).to_be(0x00ff00)
     nx.test.expect(cells[3].text).to_be(" -1 ")
-    nx.test.expect(cells[3].hl).to_be("DiffDelete")
+    nx.test.expect(hl_of(cells[3].hl).fg).to_be(0xff0000)
     nx.test.expect(cells[4].text).to_be(" ")
     nx.test.expect(cells[4].hl).to_be(neutral)
   end)
 
   -- The same shape for the per-severity diagnostic counts.
   nx.test.it("pads each diagnostic count in its own severity colour", function(t)
+    nx.hl.define(0, "DiagnosticError", { fg = "#ff0000" })
+    nx.hl.define(0, "DiagnosticWarn", { fg = "#ffaa00" })
     line.setup({
       options = { globalstatus = true, icons_enabled = false },
       sections = { lualine_b = { "diagnostics" } },
@@ -313,9 +324,9 @@ nx.test.describe("nxvim-line.own-highlight padding", function()
     nx.test.expect(cells[1].text).to_be(" ")
     nx.test.expect(cells[1].hl).to_be(neutral)
     nx.test.expect(cells[2].text).to_be(" E:1 ")
-    nx.test.expect(cells[2].hl).to_be("DiagnosticError")
+    nx.test.expect(hl_of(cells[2].hl).fg).to_be(0xff0000)
     nx.test.expect(cells[3].text).to_be(" W:1 ")
-    nx.test.expect(cells[3].hl).to_be("DiagnosticWarn")
+    nx.test.expect(hl_of(cells[3].hl).fg).to_be(0xffaa00)
     nx.test.expect(cells[4].text).to_be(" ")
     nx.test.expect(cells[4].hl).to_be(neutral)
     nx.diagnostic.reset(ns, 0)
@@ -336,6 +347,154 @@ nx.test.describe("nxvim-line.own-highlight padding", function()
     local neutral = highlights.section_group("b", "normal")
     nx.test.expect(cells[1].text).to_be(" NORMAL ")
     nx.test.expect(cells[1].hl).never.to_be(neutral)
+  end)
+end)
+
+-- A section whose background is NOT the bar's `StatusLine` background — catppuccin's
+-- lualine theme (`surface0` for section b) over its `StatusLine` (`mantle`), the setup the
+-- bug was reported on, with its real colours.
+local CATPPUCCIN_B_BG = 0x313244
+local CATPPUCCIN_SL_BG = 0x181825
+local function setup_two_tone(sections)
+  nx.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" })
+  line.setup({
+    options = {
+      globalstatus = true,
+      icons_enabled = false,
+      theme = {
+        normal = {
+          a = { fg = "#11111b", bg = "#89b4fa" },
+          b = { fg = "#89b4fa", bg = "#313244" },
+          c = {},
+        },
+      },
+    },
+    sections = sections,
+  })
+end
+
+nx.test.describe("nxvim-line.own-highlight background", function()
+  -- A cell carrying its OWN colour named an editor group verbatim (`DiagnosticError` for
+  -- an error count, `DiffAdd` for an added-lines count). A cell hl is a WHOLE highlight
+  -- group, and a client fills an attribute the group leaves unset from the BAR's base
+  -- `StatusLine` — not from the section around the cell, which is only the previous cell's
+  -- group. Catppuccin defines `DiagnosticError` foreground-only, so its counts rendered on
+  -- `mantle` inside a `surface0` section: a dark block in a lighter bar. Each count now
+  -- paints its own foreground over the SECTION's background.
+  nx.test.it("merges a count's foreground onto the section background", function(t)
+    nx.hl.define(0, "DiagnosticError", { fg = "#f38ba8" })
+    nx.hl.define(0, "DiagnosticWarn", { fg = "#f9e2af" })
+    setup_two_tone({ lualine_b = { "diagnostics" } })
+    nudge(t)
+    local ns = vim.api.nvim_create_namespace("nxline_diag_bg_test")
+    nx.diagnostic.set(ns, 0, {
+      { lnum = 0, col = 0, severity = 1, message = "an error" },
+      { lnum = 1, col = 0, severity = 2, message = "a warning" },
+    })
+    line.refresh()
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("E:1")
+    end)
+
+    -- the two backgrounds the bug is about really do differ in this session
+    nx.test.expect(hl_of(highlights.section_group("b", "normal")).bg).to_be(CATPPUCCIN_B_BG)
+    nx.test.expect(hl_of("StatusLine").bg).to_be(CATPPUCCIN_SL_BG)
+
+    local cells = compile._last.NxLineB
+    nx.test.expect(cells[2].text).to_be(" E:1 ")
+    nx.test.expect(hl_of(cells[2].hl).fg).to_be(0xf38ba8)
+    nx.test.expect(hl_of(cells[2].hl).bg).to_be(CATPPUCCIN_B_BG) -- not StatusLine's
+    nx.test.expect(cells[3].text).to_be(" W:1 ")
+    nx.test.expect(hl_of(cells[3].hl).fg).to_be(0xf9e2af)
+    nx.test.expect(hl_of(cells[3].hl).bg).to_be(CATPPUCCIN_B_BG)
+    nx.diagnostic.reset(ns, 0)
+  end)
+
+  -- lualine's `create_component_highlight_group` semantics for a component-level `color`:
+  -- a colour naming no background is merged over the section's, one that names a
+  -- background is a deliberate block and is left whole.
+  nx.test.it("a fg-only color takes the section bg, one with a bg is left whole", function(t)
+    nx.hl.define(0, "NxLineTestGroup", { fg = "#00ffff", bg = "#010203" })
+    setup_two_tone({
+      lualine_b = { { "mode", color = { fg = "#00ff00", gui = "bold" } } },
+      lualine_c = { { "mode", color = "NxLineTestGroup" } },
+    })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("NORMAL")
+    end)
+
+    local b = compile._last.NxLineB[1]
+    nx.test.expect(hl_of(b.hl).fg).to_be(0x00ff00)
+    nx.test.expect(hl_of(b.hl).bg).to_be(CATPPUCCIN_B_BG)
+    nx.test.expect(hl_of(b.hl).bold).to_be(true) -- the gui attrs come along
+
+    local c = compile._last.NxLineC[1]
+    nx.test.expect(c.hl).to_be("NxLineTestGroup")
+  end)
+end)
+
+nx.test.describe("nxvim-line.count colours", function()
+  -- The diff counts named `Diff{Add,Change,Delete}` for their colour, but a colorscheme
+  -- gives those groups the diff-VIEW background wash and often no foreground at all
+  -- (catppuccin: `DiffAdd = { bg = darken(green) }`). Merged onto the section that left
+  -- the counts uncoloured. They now read the standard fg-only diff-summary groups first.
+  nx.test.it("takes a diff count's colour from Added/Changed/Removed", function(t)
+    local buf = nx.buf.current()
+    local name = nx.buf.name(buf)
+    local k = name ~= "" and name or vim.fn.getcwd()
+    local saved_ensure, saved_schedule = git.ensure, git.schedule
+    git.ensure, git.schedule = function() end, function() end
+    git._cache[k] = { branch = "b", diff = { added = 1, changed = 2, removed = 3 } }
+    -- catppuccin's shape: a fg-only summary group AND a bg-only diff-view group
+    nx.hl.define(0, "Added", { fg = "#a6e3a1" })
+    nx.hl.define(0, "Changed", { fg = "#89b4fa" })
+    nx.hl.define(0, "Removed", { fg = "#f38ba8" })
+    nx.hl.define(0, "DiffAdd", { bg = "#26343a" })
+    nx.hl.define(0, "DiffChange", { bg = "#1e2b40" })
+    nx.hl.define(0, "DiffDelete", { bg = "#3a2434" })
+
+    setup_two_tone({ lualine_b = { "diff" } })
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("%+1")
+    end)
+    local cells = compile._last.NxLineB
+    git.ensure, git.schedule = saved_ensure, saved_schedule
+    git._cache[k] = nil
+
+    nx.test.expect(cells[2].text).to_be(" +1 ")
+    nx.test.expect(hl_of(cells[2].hl).fg).to_be(0xa6e3a1)
+    nx.test.expect(hl_of(cells[2].hl).bg).to_be(CATPPUCCIN_B_BG) -- not DiffAdd's wash
+    nx.test.expect(cells[3].text).to_be(" ~2 ")
+    nx.test.expect(hl_of(cells[3].hl).fg).to_be(0x89b4fa)
+    nx.test.expect(cells[4].text).to_be(" -3 ")
+    nx.test.expect(hl_of(cells[4].hl).fg).to_be(0xf38ba8)
+  end)
+
+  -- With no group in the chain defined, the count still lands in the ACTIVE theme's
+  -- palette (`nx.hl.palette`) rather than a hardcoded hex from some other colorscheme.
+  nx.test.it("falls back to the theme's own hue, not a hardcoded colour", function(t)
+    for _, g in ipairs({ "DiagnosticError", "DiagnosticSignError" }) do
+      nx.hl.define(0, g, {})
+    end
+    nx.hl.define(0, "ErrorMsg", { fg = "#abcdef" }) -- the palette's `red` chain
+    setup_two_tone({ lualine_b = { "diagnostics" } })
+    nudge(t)
+    local ns = vim.api.nvim_create_namespace("nxline_diag_hue_test")
+    nx.diagnostic.set(ns, 0, { { lnum = 0, col = 0, severity = 1, message = "an error" } })
+    line.refresh()
+    nudge(t)
+    t:wait_for(function()
+      return t:statusline():find("E:%d")
+    end)
+    local cells = compile._last.NxLineB
+    nx.test.expect(cells[2].text:match("^ E:%d+ $")).never.to_be_nil()
+    nx.test.expect(hl_of(cells[2].hl).fg).to_be(tonumber(nx.hl.palette().red:sub(2), 16))
+    nx.test.expect(hl_of(cells[2].hl).fg).to_be(0xabcdef)
+    nx.test.expect(hl_of(cells[2].hl).bg).to_be(CATPPUCCIN_B_BG)
+    nx.diagnostic.reset(ns, 0)
   end)
 end)
 

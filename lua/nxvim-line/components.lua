@@ -15,6 +15,7 @@
 -- Diagnostic*/Diff* groups. Per-mode theme colour arrives in Phase 4.
 
 local git = require("nxvim-line.git")
+local highlights = require("nxvim-line.highlights")
 local icons = require("nxvim-line.icons")
 local lspprogress = require("nxvim-line.lspprogress")
 
@@ -286,12 +287,20 @@ M.register("progress", {
 -- ----- diagnostics -----------------------------------------------------------
 
 -- opts.symbols overrides the per-severity prefix. With icons on, Nerd-Font glyphs (a
--- trailing space separating glyph from count); with icons off, readable letters. Each
--- count is coloured with the editor's existing Diagnostic* groups.
+-- trailing space separating glyph from count); with icons off, readable letters.
 local DIAG_GLYPHS =
   { error = "\u{f057} ", warn = "\u{f071} ", info = "\u{f05a} ", hint = "\u{f0eb} " }
 local DIAG_LETTERS = { error = "E:", warn = "W:", info = "I:", hint = "H:" }
-local DIAG_HL = { "DiagnosticError", "DiagnosticWarn", "DiagnosticInfo", "DiagnosticHint" }
+
+-- Each count takes its FOREGROUND from the editor's own group for that severity, per
+-- severity 1..4, ending in the theme's hue when it defines none (see `highlights.accent`);
+-- the surrounding section supplies the background.
+local DIAG_HL = {
+  { { "DiagnosticError", "DiagnosticSignError" }, "red" },
+  { { "DiagnosticWarn", "DiagnosticSignWarn" }, "yellow" },
+  { { "DiagnosticInfo", "DiagnosticSignInfo" }, "blue" },
+  { { "DiagnosticHint", "DiagnosticSignHint" }, "cyan" },
+}
 
 M.register("diagnostics", {
   events = { "LspDiagnostics", "BufEnter" },
@@ -309,7 +318,10 @@ M.register("diagnostics", {
     -- Padded on both sides in the severity's own colour, like the diff counts above.
     for i = 1, 4 do
       if counts[i] > 0 then
-        cells[#cells + 1] = { text = " " .. syms[i] .. counts[i] .. " ", hl = DIAG_HL[i] }
+        cells[#cells + 1] = {
+          text = " " .. syms[i] .. counts[i] .. " ",
+          hl = highlights.accent(DIAG_HL[i][1], DIAG_HL[i][2]),
+        }
       end
     end
     if #cells == 0 then
@@ -525,6 +537,16 @@ M.register("branch", {
   end,
 })
 
+-- The FOREGROUND each count paints in, most specific group first (see
+-- `highlights.accent`). `Added`/`Changed`/`Removed` are the standard fg-only diff-summary
+-- groups every theme carries; `Diff{Add,Change,Delete}` come last because a colorscheme
+-- typically gives them only the diff-VIEW background wash (catppuccin defines them with no
+-- foreground at all), which is a line highlight, not a colour for a count on the bar. When
+-- a theme defines none of them, the theme's own hue closes the chain.
+local DIFF_ADD_HL = { "Added", "DiffAdded", "GitSignsAdd", "DiffAdd" }
+local DIFF_CHANGE_HL = { "Changed", "DiffChanged", "GitSignsChange", "DiffChange" }
+local DIFF_DELETE_HL = { "Removed", "DiffRemoved", "GitSignsDelete", "DiffDelete" }
+
 M.register("diff", {
   events = { "BufEnter", "TextChanged" },
   file_only = true, -- likewise: no file, no diff against one
@@ -538,18 +560,18 @@ M.register("diff", {
     end
     local cells = {}
     -- Each count owns the space on BOTH sides of it, in its own colour: the gap between
-    -- two counts is then half one colour and half the other, so a background-coloured
-    -- Diff* group reads as an evenly padded block instead of one count's colour leaking
-    -- into the space before the next. (The component's OUTER padding stays neutral —
-    -- compile emits it as its own cell, see `pad_run`.)
+    -- two counts is then half one colour and half the other, so a count whose group
+    -- carries a background reads as an evenly padded block instead of one count's colour
+    -- leaking into the space before the next. (The component's OUTER padding stays
+    -- neutral — compile emits it as its own cell, see `pad_run`.)
     local function push(n, prefix, hl)
       if n > 0 then
         cells[#cells + 1] = { text = " " .. prefix .. n .. " ", hl = hl }
       end
     end
-    push(d.added, "+", "DiffAdd")
-    push(d.changed, "~", "DiffChange")
-    push(d.removed, "-", "DiffDelete")
+    push(d.added, "+", highlights.accent(DIFF_ADD_HL, "green"))
+    push(d.changed, "~", highlights.accent(DIFF_CHANGE_HL, "yellow"))
+    push(d.removed, "-", highlights.accent(DIFF_DELETE_HL, "red"))
     if #cells == 0 then
       return nil
     end

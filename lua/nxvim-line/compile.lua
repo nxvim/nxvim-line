@@ -162,7 +162,12 @@ end
 -- `cond` gate → `provide` → `fmt` (text transform) → `icon` (leading glyph) → `color`
 -- (highlight override) → `on_click` (the native click handler). A callback error becomes
 -- a loud `E:<name>` cell; a hidden/empty result is `{}`.
-local function component_cells(comp, ctx)
+--
+-- `section_hl` is the group the surrounding section paints in: a cell bringing a
+-- foreground-only colour of its own is merged over that section's background (see
+-- `highlights.fg_on_section`). The emptiness probe below omits it — it only counts a
+-- section's cells, never paints them.
+local function component_cells(comp, ctx, section_hl)
   -- lualine `cond(ctx)`: gate the whole component (false → render nothing).
   if type(comp.cond) == "function" then
     local ok, show = pcall(comp.cond, ctx)
@@ -245,10 +250,23 @@ local function component_cells(comp, ctx)
 
   -- lualine component-level `color`: overrides every one of the component's cell hls
   -- (a string group name, or a { fg, bg, gui } table interned by highlights.color_group).
+  --
+  -- Either way the result goes through `fg_on_section`: a highlight naming no background
+  -- of its own takes the section's, which is lualine's rule too (a partially-specified
+  -- `color` is merged over the theme's section colours, a fully-specified one is not).
   if comp.color ~= nil then
-    local hl = highlights.color_group(comp.color)
+    local hl = highlights.fg_on_section(highlights.color_group(comp.color), section_hl)
     for _, c in ipairs(run) do
       c.hl = hl
+    end
+  else
+    -- A cell that brought its OWN highlight (a per-severity `diagnostics` count, a per-kind
+    -- `diff` count, a custom component's `hl`) names a foreground; it still sits on the
+    -- section's background.
+    for _, c in ipairs(run) do
+      if c.hl ~= nil then
+        c.hl = highlights.fg_on_section(c.hl, section_hl)
+      end
     end
   end
 
@@ -353,7 +371,7 @@ local function render_section(ctx, opts)
 
   local pieces = {}
   for _, comp in ipairs(comps) do
-    local run = component_cells(comp, ctx)
+    local run = component_cells(comp, ctx, section_hl)
     if #run > 0 then
       pieces[#pieces + 1] = { comp = comp, cells = run }
     end
@@ -759,7 +777,7 @@ function M._tabline()
       if nonempty(comps) then
         local section_hl = highlights.section_group(SECTION_LETTER[sec], mode)
         for _, comp in ipairs(comps) do
-          local run = component_cells(comp, rctx)
+          local run = component_cells(comp, rctx, section_hl)
           if #run > 0 then
             -- the same padding rule as a statusline section (see `pad_run`), with the
             -- tabline's fixed one-space padding
