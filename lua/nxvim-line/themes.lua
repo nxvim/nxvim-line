@@ -142,8 +142,15 @@ end
 -- the active colorscheme (`vim.g.colors_name`) — a colorscheme like catppuccin sets
 -- `colors_name = "catppuccin-mocha"` and ships `lualine/themes/catppuccin-mocha.lua`,
 -- a hand-tuned palette that reads far better than anything synthesized. Only when no
--- such theme exists do we synthesize a powerline palette from the canonical highlight
--- groups (section-a accent per mode from a semantic group, b/c from StatusLine/Normal).
+-- such theme exists do we synthesize a powerline palette.
+--
+-- The synthesized accents come from `nx.hl.palette()` — the editor's canonical
+-- reading of the active theme's semantic hues, each resolved through a CHAIN of
+-- groups (blue = Function → Directory → Title, and so on) rather than from a single
+-- group that a partial theme may not define. That is what keeps the bar in the
+-- theme's own palette instead of dropping to a generic magenta/red for the modes
+-- whose one source group happened to be missing. The bar's own surfaces still come
+-- from the StatusLine groups directly, since those ARE the bar.
 function M.derive_auto()
   local name = vim.g.colors_name
   if type(name) == "string" and name ~= "" then
@@ -153,37 +160,33 @@ function M.derive_auto()
     end
   end
 
-  local normal, statusline = hl("Normal"), hl("StatusLine")
-  local statuslinenc = hl("StatusLineNC")
-  local bg = hex(normal.bg, "#1c1c1c")
-  local fg = hex(normal.fg, "#c6c6c6")
-  local sl_bg = hex(statusline.bg, "#3a3a3a")
+  local p = nx.hl.palette()
+  local statusline, statuslinenc = hl("StatusLine"), hl("StatusLineNC")
+  local bg, fg = p.bg, p.fg
+  local sl_bg = hex(statusline.bg, p.bg_alt)
   local sl_fg = hex(statusline.fg, fg)
   -- The unfocused-window bar rides StatusLineNC: a dimmer foreground (neovim fades
-  -- the inactive statusline text) over the same darker background. Fall back to a
-  -- muted grey / the active bar bg when the colorscheme leaves NC undefined.
-  local nc_fg = hex(statuslinenc.fg, "#888888")
+  -- the inactive statusline text) over the same darker background. Fall back to the
+  -- theme's own muted hue / the active bar bg when it leaves NC undefined.
+  local nc_fg = hex(statuslinenc.fg, p.muted)
   local nc_bg = hex(statuslinenc.bg, sl_bg)
-  local function accent(group, fallback)
-    return hex(hl(group).fg, fallback)
-  end
   local function a(acc)
     return { fg = bg, bg = acc, gui = "bold" }
   end
   return {
     normal = {
-      a = a(accent("Function", "#5fafff")),
+      a = a(p.blue),
       b = { fg = fg, bg = sl_bg },
       -- The fill (c) — and every section defaulting to it (x) — rides the
       -- StatusLine background, NOT Normal, so the bar reads as a distinct strip
       -- rather than blending into the document (e.g. catppuccin's mantle vs base).
       c = { fg = sl_fg, bg = sl_bg },
     },
-    insert = { a = a(accent("String", "#5faf5f")) },
-    visual = { a = a(accent("Statement", "#d787d7")) },
-    replace = { a = a(accent("Error", "#ff5f5f")) },
-    command = { a = a(accent("Constant", "#ffaf00")) },
-    terminal = { a = a(accent("Type", "#5fd7af")) },
+    insert = { a = a(p.green) },
+    visual = { a = a(p.purple) },
+    replace = { a = a(p.red) },
+    command = { a = a(p.orange) },
+    terminal = { a = a(p.cyan) },
     -- The inactive (unfocused-window) bar is flat, on the StatusLineNC background,
     -- with a FADED foreground — matching neovim, where the inactive statusline text
     -- is dimmed rather than shown at full brightness.

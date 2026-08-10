@@ -342,14 +342,25 @@ component-specific options (e.g. `filename.path`, `diagnostics.symbols`,
 
 >
     a TABLE   A lualine-shaped palette, used as-is (see below).
-    "auto"    Derive a palette from the active colorscheme (reads Normal /
-              StatusLine / Function / String / … via nx.hl.get, with
-              fallbacks).
+    "auto"    The active colorscheme's own palette. If the theme ships a
+              lualine theme module it is used (real lualine's behaviour);
+              otherwise a powerline palette is synthesized from the bar's
+              StatusLine / StatusLineNC groups plus the semantic accents
+              nx.hl.palette() reads off the theme.
     a NAME    Resolved bundled ("default") →
               require("lualine.themes.<name>") → error. So
               theme = "catppuccin" loads catppuccin's own lualine theme
               module (pure Lua on the runtimepath) unchanged.
 <
+
+`"auto"` is the default, and it re-derives on every `ColorScheme` event, so
+switching themes live moves the bar with them. Each synthesized mode accent
+comes from a CHAIN of canonical groups (normal ← Function → Directory →
+Title, insert ← String, visual ← Keyword → Statement, replace ←
+DiagnosticError → ErrorMsg, command ← Constant → Number, terminal ←
+Operator → Special) rather than from a single group, so a theme that leaves
+one of them undefined still yields a colour from its own palette instead of
+dropping that mode to a generic default.
 
 A palette is a per-mode table in lualine's exact shape:
 

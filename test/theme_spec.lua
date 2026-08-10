@@ -109,6 +109,30 @@ nx.test.describe("nxvim-line.themes (pure)", function()
     nx.test.expect(pal.inactive.a.fg).to_be("#45475a")
     nx.test.expect(pal.normal.c.fg).to_be("#cdd6f4")
   end)
+
+  -- Every mode accent comes from `nx.hl.palette()`, so under the editor's own `nxvim`
+  -- scheme the whole bar is in One Dark. The regression this guards: the accents used
+  -- to read ONE group each (visual←Statement, replace←Error), and a theme that leaves
+  -- that group undefined dropped those modes to a hardcoded generic magenta/red that
+  -- belonged to no palette at all — which is exactly what `:colorscheme nxvim` did.
+  nx.test.it("auto derives every mode accent from the active palette", function(t)
+    t:cmd("hi clear")
+    t:cmd("colorscheme nxvim")
+    vim.g.colors_name = "no-lualine-theme-here" -- force the synthesis fallback path
+    local pal = themes.derive_auto()
+    nx.test.expect(pal.normal.a.bg).to_be("#61afef") -- One Dark blue
+    nx.test.expect(pal.insert.a.bg).to_be("#98c379") -- green
+    nx.test.expect(pal.visual.a.bg).to_be("#c678dd") -- purple
+    nx.test.expect(pal.replace.a.bg).to_be("#e06c75") -- red
+    nx.test.expect(pal.command.a.bg).to_be("#d19a66") -- orange
+    nx.test.expect(pal.terminal.a.bg).to_be("#56b6c2") -- cyan
+    -- The bar's own surfaces come from the StatusLine groups the scheme defines.
+    nx.test.expect(pal.normal.c.bg).to_be("#21252b")
+    nx.test.expect(pal.normal.a.fg).to_be("#282c34") -- text on an accent = Normal bg
+    -- The inactive bar rides StatusLineNC, which the built-in scheme now defines.
+    nx.test.expect(pal.inactive.c.fg).to_be("#5c6370")
+    nx.test.expect(pal.inactive.c.bg).to_be("#21252b")
+  end)
 end)
 
 nx.test.describe("nxvim-line.theme", function()
