@@ -1,13 +1,13 @@
--- Runnable demo for nxvim-line.
+-- Runnable demo for bemtvi-line.
 --
---     NXVIM_CONFIG=examples nxvim examples/sample.lua
+--     BEMTVI_CONFIG=examples bemtvi examples/sample.lua
 --
--- The config + the lualine->nx.statusline compiler + the component library (mode,
+-- The config + the lualine->btv.statusline compiler + the component library (mode,
 -- branch, diff, diagnostics, filename, filetype, encoding, fileformat, lsp, progress,
 -- location, searchcount, daemon, label) + the lualine LOOK — Nerd-Font icons,
 -- separators, per-component colour/padding, and mode-reactive theme colour (the bar
 -- recolours by mode; `theme = "auto"` derives from your colorscheme). See
--- docs/plans/2026-06-21-nxvim-line.md.
+-- docs/plans/2026-06-21-bemtvi-line.md.
 --
 -- TYPE THIS / SEE THAT:
 --   * open a file in a git repo   -> section B shows the branch ( glyph) + diff counts
@@ -17,13 +17,13 @@
 --   * `/local<CR>` then `n` / `N` -> section Y shows searchcount's `[idx/total]`
 
 -- Load the plugin straight from this repo (a local-dev spec: `dir` is never cloned).
--- A real config would instead use `{ "davidrios/nxvim-line", config = ... }` + :PluginSync.
-nx.plugins({
+-- A real config would instead use `{ "davidrios/bemtvi-line", config = ... }` + :PluginSync.
+btv.plugins({
   {
-    name = "nxvim-line",
+    name = "bemtvi-line",
     dir = vim.fn.expand("<sfile>:p:h:h"), -- the repo root (this file's grandparent dir)
     config = function()
-      require("nxvim-line").setup({
+      require("bemtvi-line").setup({
         options = { theme = "auto" }, -- derive the palette from the active colorscheme
         sections = {
           lualine_a = { "mode" },
@@ -42,7 +42,7 @@ nx.plugins({
           lualine_x = { "location" },
         },
         -- per-filetype layout overrides (the tree shows a title, qf a label)
-        extensions = { "nxvim-tree", "quickfix" },
+        extensions = { "bemtvi-tree", "quickfix" },
       })
     end,
   },

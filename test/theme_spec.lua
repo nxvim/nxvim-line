@@ -1,21 +1,21 @@
 -- Phase 4 — themes + mode-reactive colour. The signature lualine experience: the bar
 -- recolours by mode. The status mirror carries text only, so the mode-flip is observed
 -- through `compile._last` (the cells each segment last emitted) and the generated
--- `lualine_<section>_<mode>` groups through `nx.hl`. Pure helpers (mode resolver, palette
+-- `lualine_<section>_<mode>` groups through `btv.hl`. Pure helpers (mode resolver, palette
 -- normalize, theme resolution) are exercised directly.
 --
---     nxvim --test-plugin ~/work/nxvim-plugins/nxvim-line
+--     bemtvi --test-plugin ~/work/bemtvi-plugins/bemtvi-line
 
-local line = require("nxvim-line")
-local themes = require("nxvim-line.themes")
-local compile = require("nxvim-line.compile")
+local line = require("bemtvi-line")
+local themes = require("bemtvi-line.themes")
+local compile = require("bemtvi-line.compile")
 
 local function nudge(t)
   t:feed("<Esc>")
 end
 
-nx.test.describe("nxvim-line.themes (pure)", function()
-  nx.test.it("maps every mode code to its theme key", function()
+btv.test.describe("bemtvi-line.themes (pure)", function()
+  btv.test.it("maps every mode code to its theme key", function()
     local cases = {
       n = "normal",
       i = "insert",
@@ -34,29 +34,29 @@ nx.test.describe("nxvim-line.themes (pure)", function()
       S = "visual",
     }
     for code, want in pairs(cases) do
-      nx.test.expect(themes.mode_of(code)).to_be(want)
+      btv.test.expect(themes.mode_of(code)).to_be(want)
     end
-    nx.test.expect(themes.mode_of("?")).to_be("normal") -- unknown → normal
+    btv.test.expect(themes.mode_of("?")).to_be("normal") -- unknown → normal
   end)
 
-  nx.test.it("normalize fills x/y/z from c/b/a and missing modes from normal", function()
+  btv.test.it("normalize fills x/y/z from c/b/a and missing modes from normal", function()
     local norm = themes.normalize({
       normal = { a = { bg = "#111111" }, b = { bg = "#222222" }, c = { bg = "#333333" } },
       insert = { a = { bg = "#444444" } },
     })
     -- x/y/z default to c/b/a
-    nx.test.expect(norm.normal.x.bg).to_be("#333333")
-    nx.test.expect(norm.normal.y.bg).to_be("#222222")
-    nx.test.expect(norm.normal.z.bg).to_be("#111111")
+    btv.test.expect(norm.normal.x.bg).to_be("#333333")
+    btv.test.expect(norm.normal.y.bg).to_be("#222222")
+    btv.test.expect(norm.normal.z.bg).to_be("#111111")
     -- an unspecified mode (visual) inherits normal wholesale
-    nx.test.expect(norm.visual.a.bg).to_be("#111111")
+    btv.test.expect(norm.visual.a.bg).to_be("#111111")
     -- insert overrode only `a`; b/c fall back to normal's
-    nx.test.expect(norm.insert.a.bg).to_be("#444444")
-    nx.test.expect(norm.insert.b.bg).to_be("#222222")
+    btv.test.expect(norm.insert.a.bg).to_be("#444444")
+    btv.test.expect(norm.insert.b.bg).to_be("#222222")
   end)
 
-  nx.test.it("resolve errors loud on an unknown theme name", function()
-    nx.test
+  btv.test.it("resolve errors loud on an unknown theme name", function()
+    btv.test
       .expect(function()
         themes.resolve("definitely-not-a-theme")
       end)
@@ -67,17 +67,17 @@ nx.test.describe("nxvim-line.themes (pure)", function()
   -- StatusLine background, NOT Normal — otherwise the bar blends into the document
   -- (e.g. catppuccin's mantle vs base). `x` defaults to `c`, so the whole right
   -- half of the active bar follows.
-  nx.test.it("auto's fill (c) and inactive sections ride the StatusLine bg, not Normal", function()
+  btv.test.it("auto's fill (c) and inactive sections ride the StatusLine bg, not Normal", function()
     vim.g.colors_name = "no-lualine-theme-here" -- force the synthesis fallback path
-    nx.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" }) -- the document bg
-    nx.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- a darker bar bg
+    btv.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" }) -- the document bg
+    btv.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- a darker bar bg
     local pal = themes.derive_auto()
-    nx.test.expect(pal.normal.c.bg).to_be("#181825")
-    nx.test.expect(pal.inactive.b.bg).to_be("#181825")
-    nx.test.expect(pal.inactive.c.bg).to_be("#181825")
+    btv.test.expect(pal.normal.c.bg).to_be("#181825")
+    btv.test.expect(pal.inactive.b.bg).to_be("#181825")
+    btv.test.expect(pal.inactive.c.bg).to_be("#181825")
   end)
 
-  nx.test.it("auto prefers the active colorscheme's shipped lualine theme", function()
+  btv.test.it("auto prefers the active colorscheme's shipped lualine theme", function()
     -- Real lualine's `auto` loads `lualine.themes.<colors_name>` when it exists
     -- (e.g. catppuccin ships catppuccin-mocha) rather than synthesizing. Simulate a
     -- shipped theme via package.loaded and point colors_name at it.
@@ -89,70 +89,70 @@ nx.test.describe("nxvim-line.themes (pure)", function()
     local prev = vim.g.colors_name
     vim.g.colors_name = "faketheme"
     -- Even with distinct highlight groups present, the shipped theme wins.
-    nx.hl.define(0, "Normal", { fg = "#ffffff", bg = "#111111" })
-    nx.hl.define(0, "StatusLine", { fg = "#ffffff", bg = "#222222" })
+    btv.hl.define(0, "Normal", { fg = "#ffffff", bg = "#111111" })
+    btv.hl.define(0, "StatusLine", { fg = "#ffffff", bg = "#222222" })
     local pal = themes.derive_auto()
-    nx.test.expect(pal.normal.a.bg).to_be("#89b4fa")
-    nx.test.expect(pal.normal.c.bg).to_be("#181825")
+    btv.test.expect(pal.normal.a.bg).to_be("#89b4fa")
+    btv.test.expect(pal.normal.c.bg).to_be("#181825")
     package.loaded["lualine.themes.faketheme"] = nil
     vim.g.colors_name = prev
   end)
 
-  nx.test.it("auto's inactive bar uses StatusLineNC's faded foreground", function()
+  btv.test.it("auto's inactive bar uses StatusLineNC's faded foreground", function()
     vim.g.colors_name = "no-lualine-theme-here" -- force the synthesis fallback path
-    nx.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" })
-    nx.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- active: bright text
-    nx.hl.define(0, "StatusLineNC", { fg = "#45475a", bg = "#181825" }) -- inactive: faded text
+    btv.hl.define(0, "Normal", { fg = "#cdd6f4", bg = "#1e1e2e" })
+    btv.hl.define(0, "StatusLine", { fg = "#cdd6f4", bg = "#181825" }) -- active: bright text
+    btv.hl.define(0, "StatusLineNC", { fg = "#45475a", bg = "#181825" }) -- inactive: faded text
     local pal = themes.derive_auto()
     -- The inactive text is the dimmer StatusLineNC fg, not the active StatusLine fg.
-    nx.test.expect(pal.inactive.c.fg).to_be("#45475a")
-    nx.test.expect(pal.inactive.a.fg).to_be("#45475a")
-    nx.test.expect(pal.normal.c.fg).to_be("#cdd6f4")
+    btv.test.expect(pal.inactive.c.fg).to_be("#45475a")
+    btv.test.expect(pal.inactive.a.fg).to_be("#45475a")
+    btv.test.expect(pal.normal.c.fg).to_be("#cdd6f4")
   end)
 
-  -- Every mode accent comes from `nx.hl.palette()`, so under the editor's own `nxvim`
+  -- Every mode accent comes from `btv.hl.palette()`, so under the editor's own `bemtvi`
   -- scheme the whole bar is in One Dark. The regression this guards: the accents used
   -- to read ONE group each (visual←Statement, replace←Error), and a theme that leaves
   -- that group undefined dropped those modes to a hardcoded generic magenta/red that
-  -- belonged to no palette at all — which is exactly what `:colorscheme nxvim` did.
-  nx.test.it("auto derives every mode accent from the active palette", function(t)
+  -- belonged to no palette at all — which is exactly what `:colorscheme bemtvi` did.
+  btv.test.it("auto derives every mode accent from the active palette", function(t)
     t:cmd("hi clear")
-    t:cmd("colorscheme nxvim")
+    t:cmd("colorscheme bemtvi")
     vim.g.colors_name = "no-lualine-theme-here" -- force the synthesis fallback path
     local pal = themes.derive_auto()
-    nx.test.expect(pal.normal.a.bg).to_be("#61afef") -- One Dark blue
-    nx.test.expect(pal.insert.a.bg).to_be("#98c379") -- green
-    nx.test.expect(pal.visual.a.bg).to_be("#c678dd") -- purple
-    nx.test.expect(pal.replace.a.bg).to_be("#e06c75") -- red
-    nx.test.expect(pal.command.a.bg).to_be("#d19a66") -- orange
-    nx.test.expect(pal.terminal.a.bg).to_be("#56b6c2") -- cyan
+    btv.test.expect(pal.normal.a.bg).to_be("#61afef") -- One Dark blue
+    btv.test.expect(pal.insert.a.bg).to_be("#98c379") -- green
+    btv.test.expect(pal.visual.a.bg).to_be("#c678dd") -- purple
+    btv.test.expect(pal.replace.a.bg).to_be("#e06c75") -- red
+    btv.test.expect(pal.command.a.bg).to_be("#d19a66") -- orange
+    btv.test.expect(pal.terminal.a.bg).to_be("#56b6c2") -- cyan
     -- The bar's own surfaces come from the StatusLine groups the scheme defines.
-    nx.test.expect(pal.normal.c.bg).to_be("#21252b")
-    nx.test.expect(pal.normal.a.fg).to_be("#282c34") -- text on an accent = Normal bg
+    btv.test.expect(pal.normal.c.bg).to_be("#21252b")
+    btv.test.expect(pal.normal.a.fg).to_be("#282c34") -- text on an accent = Normal bg
     -- The inactive bar rides StatusLineNC, which the built-in scheme now defines.
-    nx.test.expect(pal.inactive.c.fg).to_be("#5c6370")
-    nx.test.expect(pal.inactive.c.bg).to_be("#21252b")
+    btv.test.expect(pal.inactive.c.fg).to_be("#5c6370")
+    btv.test.expect(pal.inactive.c.bg).to_be("#21252b")
   end)
 end)
 
-nx.test.describe("nxvim-line.theme", function()
-  nx.test.it(
+btv.test.describe("bemtvi-line.theme", function()
+  btv.test.it(
     "re-applies the theme on ColorScheme (colorscheme loads/switches after setup)",
     function(t)
       -- The colorscheme may load AFTER setup, or the user switches flavours live; the
       -- bar must re-derive on ColorScheme (real lualine does). Start on synthesis…
       vim.g.colors_name = "no-shipped-theme-x"
-      nx.hl.define(0, "Normal", { fg = "#cccccc", bg = "#101010" })
-      nx.hl.define(0, "StatusLine", { fg = "#cccccc", bg = "#202020" })
+      btv.hl.define(0, "Normal", { fg = "#cccccc", bg = "#101010" })
+      btv.hl.define(0, "StatusLine", { fg = "#cccccc", bg = "#202020" })
       line.setup({
         options = { globalstatus = true, theme = "auto" },
         sections = { lualine_a = { "mode" } },
       })
       nudge(t)
       t:wait_for(function()
-        return nx.hl.exists("lualine_c_normal")
+        return btv.hl.exists("lualine_c_normal")
       end)
-      nx.test.expect(nx.hl.get(0, { name = "lualine_c_normal" }).bg).to_be(0x202020) -- synthesized fill
+      btv.test.expect(btv.hl.get(0, { name = "lualine_c_normal" }).bg).to_be(0x202020) -- synthesized fill
 
       -- …then a colorscheme with a shipped lualine theme becomes active. Firing
       -- ColorScheme must re-derive and re-apply so the bar follows it.
@@ -160,16 +160,16 @@ nx.test.describe("nxvim-line.theme", function()
         normal = { a = { fg = "#000000", bg = "#89b4fa" }, c = { fg = "#cdd6f4", bg = "#181825" } },
       }
       vim.g.colors_name = "shipped-x"
-      nx.autocmd.exec("ColorScheme", {})
+      btv.autocmd.exec("ColorScheme", {})
       t:wait_for(function()
-        return nx.hl.get(0, { name = "lualine_c_normal" }).bg == 0x181825
+        return btv.hl.get(0, { name = "lualine_c_normal" }).bg == 0x181825
       end)
-      nx.test.expect(nx.hl.get(0, { name = "lualine_c_normal" }).bg).to_be(0x181825)
+      btv.test.expect(btv.hl.get(0, { name = "lualine_c_normal" }).bg).to_be(0x181825)
       package.loaded["lualine.themes.shipped-x"] = nil
     end
   )
 
-  nx.test.it("a theme table colours the sections under lualine_<sec>_<mode> names", function(t)
+  btv.test.it("a theme table colours the sections under lualine_<sec>_<mode> names", function(t)
     line.setup({
       options = {
         globalstatus = true,
@@ -182,45 +182,45 @@ nx.test.describe("nxvim-line.theme", function()
     })
     nudge(t)
     t:wait_for(function()
-      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal")
+      return t:statusline():find("NORMAL") and btv.hl.exists("lualine_a_normal")
     end)
-    nx.test.expect(nx.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0x112233)
-    nx.test.expect(nx.hl.get(0, { name = "lualine_a_insert" }).bg).to_be(0x445566)
+    btv.test.expect(btv.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0x112233)
+    btv.test.expect(btv.hl.get(0, { name = "lualine_a_insert" }).bg).to_be(0x445566)
   end)
 
-  nx.test.it("a name resolves through require('lualine.themes.<name>')", function(t)
+  btv.test.it("a name resolves through require('lualine.themes.<name>')", function(t)
     -- A lualine theme module on the runtimepath (here, preloaded) resolves unchanged.
-    package.loaded["lualine.themes.nxlfake"] = {
+    package.loaded["lualine.themes.btvlfake"] = {
       normal = { a = { fg = "#0a0a0a", bg = "#abcabc" }, b = {}, c = {} },
     }
     line.setup({
-      options = { globalstatus = true, theme = "nxlfake" },
+      options = { globalstatus = true, theme = "btvlfake" },
       sections = { lualine_a = { "mode" } },
     })
     nudge(t)
     t:wait_for(function()
-      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal")
+      return t:statusline():find("NORMAL") and btv.hl.exists("lualine_a_normal")
     end)
-    nx.test.expect(nx.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0xabcabc)
-    package.loaded["lualine.themes.nxlfake"] = nil
+    btv.test.expect(btv.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0xabcabc)
+    package.loaded["lualine.themes.btvlfake"] = nil
   end)
 
-  nx.test.it("auto derives non-nil groups from the active colorscheme", function(t)
-    nx.hl.define(0, "Normal", { fg = "#cccccc", bg = "#202020" })
-    nx.hl.define(0, "Function", { fg = "#5599ff" })
+  btv.test.it("auto derives non-nil groups from the active colorscheme", function(t)
+    btv.hl.define(0, "Normal", { fg = "#cccccc", bg = "#202020" })
+    btv.hl.define(0, "Function", { fg = "#5599ff" })
     line.setup({
       options = { globalstatus = true, theme = "auto" },
       sections = { lualine_a = { "mode" } },
     })
     nudge(t)
     t:wait_for(function()
-      return t:statusline():find("NORMAL") and nx.hl.exists("lualine_a_normal")
+      return t:statusline():find("NORMAL") and btv.hl.exists("lualine_a_normal")
     end)
     -- section A's accent is derived from Function's fg
-    nx.test.expect(nx.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0x5599ff)
+    btv.test.expect(btv.hl.get(0, { name = "lualine_a_normal" }).bg).to_be(0x5599ff)
   end)
 
-  nx.test.it("recolours section A by mode via ModeChanged", function(t)
+  btv.test.it("recolours section A by mode via ModeChanged", function(t)
     line.setup({
       options = { globalstatus = true, theme = "default" },
       sections = { lualine_a = { "mode" } },
@@ -230,32 +230,32 @@ nx.test.describe("nxvim-line.theme", function()
       return t:statusline():find("NORMAL")
     end)
     local function mode_hl()
-      local cells = compile._last.NxLineA
+      local cells = compile._last.BtvLineA
       return cells and cells[1] and cells[1].hl
     end
-    nx.test.expect(mode_hl()).to_be("lualine_a_normal")
+    btv.test.expect(mode_hl()).to_be("lualine_a_normal")
 
     t:feed("i")
     t:wait_for(function()
       return t:statusline():find("INSERT")
     end)
-    nx.test.expect(mode_hl()).to_be("lualine_a_insert")
+    btv.test.expect(mode_hl()).to_be("lualine_a_insert")
 
     t:feed("<Esc>")
     t:wait_for(function()
       return t:statusline():find("NORMAL")
     end)
-    nx.test.expect(mode_hl()).to_be("lualine_a_normal")
+    btv.test.expect(mode_hl()).to_be("lualine_a_normal")
 
     t:feed("v")
     t:wait_for(function()
       return t:statusline():find("VISUAL")
     end)
-    nx.test.expect(mode_hl()).to_be("lualine_a_visual")
+    btv.test.expect(mode_hl()).to_be("lualine_a_visual")
     t:feed("<Esc>")
   end)
 
-  nx.test.it("labels and colours Helix's selection-first modes", function(t)
+  btv.test.it("labels and colours Helix's selection-first modes", function(t)
     line.setup({
       options = { globalstatus = true, theme = "default" },
       sections = { lualine_a = { "mode" } },
@@ -265,28 +265,28 @@ nx.test.describe("nxvim-line.theme", function()
       return t:statusline():find("NORMAL")
     end)
     local function mode_hl()
-      local cells = compile._last.NxLineA
+      local cells = compile._last.BtvLineA
       return cells and cells[1] and cells[1].hl
     end
 
     -- Enter Helix's selection-first normal mode: the bar reads HELIX (not the raw
     -- "HN" code) and keeps the normal palette.
-    nx.helix.enable()
+    btv.helix.enable()
     t:wait_for(function()
       return t:statusline():find("HELIX")
     end)
-    nx.test.expect(mode_hl()).to_be("lualine_a_normal")
+    btv.test.expect(mode_hl()).to_be("lualine_a_normal")
 
     -- `v` toggles Helix select (extend) mode: HELIX-SEL, coloured like visual.
     t:feed("v")
     t:wait_for(function()
       return t:statusline():find("HELIX%-SEL")
     end)
-    nx.test.expect(mode_hl()).to_be("lualine_a_visual")
+    btv.test.expect(mode_hl()).to_be("lualine_a_visual")
 
     -- Leave Helix so later tests see vim's Normal again.
     t:feed("<Esc>")
-    nx.helix.disable()
+    btv.helix.disable()
     t:wait_for(function()
       return t:statusline():find("NORMAL")
     end)

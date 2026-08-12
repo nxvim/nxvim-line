@@ -1,14 +1,14 @@
-# nxvim-line — phased implementation plan
+# bemtvi-line — phased implementation plan
 
-A fully-featured, **lualine-style** statusline for nxvim. lualine's whole value is its
+A fully-featured, **lualine-style** statusline for bemtvi. lualine's whole value is its
 *config shape* — `sections = { lualine_a = {...}, ... }`, themeable, mode-coloured,
-powerline-separated, with a rich component library. nxvim-line delivers that shape, but
+powerline-separated, with a rich component library. bemtvi-line delivers that shape, but
 it is a **compiler, not a renderer**: the editor already owns statusline rendering via
-the native `nx.statusline` segment registry, so this plugin LOWERS a lualine-shaped
+the native `btv.statusline` segment registry, so this plugin LOWERS a lualine-shaped
 config onto that primitive and lets the hot path stay in Rust.
 
 ```lua
-require("nxvim-line").setup({
+require("bemtvi-line").setup({
   theme = "auto",
   sections = {
     lualine_a = { "mode" },
@@ -23,17 +23,17 @@ require("nxvim-line").setup({
 
 ## What the editor already provides (and what it doesn't)
 
-The native `nx.statusline` API (nxvim repo: `docs/specs/2026-06-11-native-plugin-api.md`
-§2, `docs/plans/2026-06-15-nx-statusline-segments.md`) is **landed and complete** for
-what it covers — nxvim-line is built entirely on it:
+The native `btv.statusline` API (bemtvi repo: `docs/specs/2026-06-11-native-plugin-api.md`
+§2, `docs/plans/2026-06-15-btv-statusline-segments.md`) is **landed and complete** for
+what it covers — bemtvi-line is built entirely on it:
 
-- **Two halves, ordered named segments**: `nx.statusline.setup{ left = {...}, right = {...} }`.
+- **Two halves, ordered named segments**: `btv.statusline.setup{ left = {...}, right = {...} }`.
   A window-local layout via `setup{ win = N, ... }`; `reset()` drops it.
-- **Built-in segments** resolve natively in `nxvim-core` **every frame** (no Lua per
+- **Built-in segments** resolve natively in `bemtvi-core` **every frame** (no Lua per
   frame): `mode`, `filename` (`%t`), `filepath` (`%f`), `filetype`, `encoding`,
   `location` (`line,col`), `modified`, `readonly`, `diagnostics` (per-severity counts).
-- **Custom Lua segments** — `nx.statusline.segment{ name, render(ctx)->cells, events }`
-  — run `render` **only on invalidation**: an explicit `nx.statusline.invalidate(name)`
+- **Custom Lua segments** — `btv.statusline.segment{ name, render(ctx)->cells, events }`
+  — run `render` **only on invalidation**: an explicit `btv.statusline.invalidate(name)`
   (the async pattern) or one of the segment's declared autocmd `events`. The server
   caches the published cells per `(window, name)` and paints them until the next
   invalidation (ADR 0002 rule 4: never re-enter Lua per redraw).
@@ -42,10 +42,10 @@ what it covers — nxvim-line is built entirely on it:
   (split/close/focus/buffer-swap). This is the seam for **inactive-window** statuslines.
 - **Cells carry highlights and clicks**: a cell is `{ text, hl = "Group"?, on_click =
   "v:lua.<fn>"? }`; a left-click fires the handler — the same dispatch as `%@…%X`.
-- **Highlights**: `nx.hl.define(name, spec)` / `nx.hl.get` / `nx.hl.exists` — define the
+- **Highlights**: `btv.hl.define(name, spec)` / `btv.hl.get` / `btv.hl.exists` — define the
   section/component groups and **auto-derive a theme** by reading the active colorscheme.
 - **Global statusline**: `vim.o.laststatus = 3` (a single bottom bar) is supported.
-- **`ModeChanged` autocmd** (landed in nxvim core, commit `c7c3ce2d`, 2026-06-21 — the
+- **`ModeChanged` autocmd** (landed in bemtvi core, commit `c7c3ce2d`, 2026-06-21 — the
   one editor seam this plan originally needed, built first). Fires on any change to the
   reported `mode()` code with the pattern `old:new` (e.g. `"n:i"`, `"v:n"`),
   glob-matchable (`"*:i"`, `"n:*"`, `"*:*"`); a handler reads the transition off
@@ -60,23 +60,23 @@ around (loud, not papered over):
 1. **No `winbar` option**, and the custom `tabline` stays on the `%`-format path (never a
    segment layout). So winbar is out of scope (a core dependency) and tabline support, if
    any, is `%`-format-driven — see Phase 7 / Out of scope.
-2. **No bundled devicons.** Like nxvim-tree, nxvim-line ships its **own** filetype/icon
+2. **No bundled devicons.** Like bemtvi-tree, bemtvi-line ships its **own** filetype/icon
    registry (overridable, and able to defer to a user-provided icon function).
 3. **No `searchcount` / no diff-against-HEAD primitive.** Search-count and git data are
-   computed in the plugin (git via `nx.run`); both are async/cached + `invalidate()`.
+   computed in the plugin (git via `btv.run`); both are async/cached + `invalidate()`.
 
 ## Architecture at a glance
 
 ```
 setup(config) ─► config.validate ─► compile.build
                                        │
-   for each section a..z:  resolve components ─► one CUSTOM nx.statusline segment
-   per section ("NxLineA".."NxLineZ"), whose render(ctx) emits the section's cells
+   for each section a..z:  resolve components ─► one CUSTOM btv.statusline segment
+   per section ("BtvLineA".."BtvLineZ"), whose render(ctx) emits the section's cells
    (icons + per-component hl + component separators), wrapped by the section's
    powerline separators in the section highlight.
                                        │
-   nx.statusline.setup{ left = {A,B,C}, right = {X,Y,Z} }   (built-ins pass through)
-   nx.hl.define(...)  lualine_<section>_<mode> groups, from the theme
+   btv.statusline.setup{ left = {A,B,C}, right = {X,Y,Z} }   (built-ins pass through)
+   btv.hl.define(...)  lualine_<section>_<mode> groups, from the theme
    event wiring:  each component's events ─► invalidate its section
                   ModeChanged (old:new) ─► re-theme + invalidate mode-coloured sections
 ```
@@ -99,8 +99,8 @@ diff), `icons` (glyph registry), `extensions` (per-filetype overrides).
 
 ## Phase 0 — Scaffold ✅ (this commit)
 
-Repo skeleton under `~/work/nxvim-plugins/nxvim-line`, matching the sibling plugins:
-`LICENSE`, `.gitignore`, `stylua.toml`, `lua/nxvim-line/init.lua` (module-map doc + a
+Repo skeleton under `~/work/bemtvi-plugins/bemtvi-line`, matching the sibling plugins:
+`LICENSE`, `.gitignore`, `stylua.toml`, `lua/bemtvi-line/init.lua` (module-map doc + a
 loud-stub `setup()` that errors until Phase 1), `examples/`, `test/`, `doc/`, this plan.
 
 ## Phase 1 — Config model + the lowering core (the compiler) ✅ (done)
@@ -117,7 +117,7 @@ surface, with `config_spec.lua` (pure) and `compile_spec.lua` (end-to-end) — 1
 > **global** bar (`laststatus=3`), so those tests set `globalstatus = true`.
 
 Notes from the build (refinements over the original sketch below):
-- `nx.statusline` already owns the event→invalidate wiring (it registers an autocmd per
+- `btv.statusline` already owns the event→invalidate wiring (it registers an autocmd per
   segment's declared `events` and replaces them on each `setup`), so `compile` just hands
   each segment the **union** of its components' events — no separate autocmd bookkeeping,
   and idempotency falls out for free.
@@ -134,12 +134,12 @@ Original step list (for reference):
   `inactive_sections`, `tabline`, `extensions`. Accept lualine's two component
   spellings — a bare string (`"filename"`) and a table (`{ "filename", icon = …,
   color = …, separator = …, cond = …, fmt = … }`). Unknown component name → **hard
-  error** (no silent blank — the `nx.statusline` unknown-segment rule, mirrored here so
+  error** (no silent blank — the `btv.statusline` unknown-segment rule, mirrored here so
   the error names the component, not an opaque `E:` cell at paint time).
 - **`compile.lua`** — `build(config)`:
-  1. For each non-empty section, register a custom `nx.statusline.segment` named
-     `NxLine<Section>` whose `render(ctx)` resolves its components to cells.
-  2. Call `nx.statusline.setup{ left = present a/b/c, right = present x/y/z }` (or
+  1. For each non-empty section, register a custom `btv.statusline.segment` named
+     `BtvLine<Section>` whose `render(ctx)` resolves its components to cells.
+  2. Call `btv.statusline.setup{ left = present a/b/c, right = present x/y/z }` (or
      `{ win = … }` per the active-window plumbing in Phase 5). Set `vim.o.laststatus`
      from `globalstatus`.
   3. Wire events: union each component's declared `events` → invalidate that section
@@ -148,7 +148,7 @@ Original step list (for reference):
      rebuilds (the keys-helper `setup()`-is-idempotent contract).
 - **Components this phase** (built-in-backed, trivial `provide`): `mode`, `filename`,
   `filetype`, `location`, `progress`, `diagnostics`. No icons/colours/separators yet.
-- **Tests** (`test/compile_spec.lua`, native `nx.test`): a config produces the expected
+- **Tests** (`test/compile_spec.lua`, native `btv.test`): a config produces the expected
   segment names + left/right layout; the projected `status` text matches; an unknown
   component errors; `setup()` twice doesn't double-register.
 
@@ -167,22 +167,22 @@ support added this phase — diagnostics/diff emit one coloured cell per part). 
 - **`diagnostics`** ✅ — per-severity counts, each coloured with the editor's
   `Diagnostic{Error,Warn,Info,Hint}` groups; configurable `symbols`; `LspDiagnostics`.
 - **`filename`** ✅ — tail / relative / absolute (`path = 0|1|2`) + `[+]`/`[-]` flags.
-  (`readonly` isn't exposed by `nx.bo`, so `[-]` tracks `nomodifiable`; shorten-when-narrow
+  (`readonly` isn't exposed by `btv.bo`, so `[-]` tracks `nomodifiable`; shorten-when-narrow
   is Phase 3.)
 - **`filetype`** ✅ — the name (devicon in Phase 3).
 - **`encoding`** ✅ — `'fileencoding'`.
 - **`progress`** ✅ — `Top`/`Bot`/`NN%`. **`location`** ✅ — `line:col`.
-- **`lsp`** ✅ — attached client names (`nx.lsp.clients`); `LspAttach`.
+- **`lsp`** ✅ — attached client names (`btv.lsp.clients`); `LspAttach`.
 
 **Reordered from the original sketch (honest scope):**
 - **`git.lua` pulled forward from Phase 6** so `branch`/`diff` are *real*, not silent
-  stubs reading an empty cache. It runs `git` via `nx.run` off the tick, caches per file,
+  stubs reading an empty cache. It runs `git` via `btv.run` off the tick, caches per file,
   and invalidates only the hosting segments on fresh data. The refresh is driven from the
   **render path**, not from a file-load event: the `branch`/`diff` `provide` calls
   `git.ensure(buf)` (a one-shot, cache-miss-guarded fetch) on each render, and the
   components list `BufEnter` + `TextChanged` so they *do* re-render when the buffer
   changes. (Why not key off a load event? A fresh `:edit` **reuses** the empty initial
-  buffer — same id, so no `BufEnter` — and a no-filetype file fires no `FileType`; nxvim
+  buffer — same id, so no `BufEnter` — and a no-filetype file fires no `FileType`; bemtvi
   also gates `BufReadPost` once-per-buffer via its `announced` set, so loading a file into
   the reused buffer fires none of them. But the file-load advances the changedtick, which
   *does* fire `TextChanged` — so that's the reliable "buffer changed" signal. The buffer
@@ -196,9 +196,9 @@ support added this phase — diagnostics/diff emit one coloured cell per part). 
   than silently rendering nothing. Both become follow-ups gated on a small core addition.
 
 - **Tests** (`components_spec.lua`): filename `[+]` flag (after an edit), encoding,
-  injected diagnostics per severity (`nx.diagnostic.set`), `lsp` → nil with no client,
+  injected diagnostics per severity (`btv.diagnostic.set`), `lsp` → nil with no client,
   the deferred-component error, `git._parse_diff` (pure hunk classification), and a
-  real-repo branch+diff end-to-end (a temp repo via `nx.test.tempdir()`).
+  real-repo branch+diff end-to-end (a temp repo via `btv.test.tempdir()`).
 
 ## Phase 3 — Separators, icons, per-component styling ✅ (done)
 
@@ -206,17 +206,17 @@ The lualine *look*, still no mode-reactive colour. Landed as `icons.lua` +
 `highlights.lua` + the styling pass in `compile.lua` (icon emission in `components.lua`),
 with `test/style_spec.lua`. **31 tests pass.**
 
-- **`icons.lua`** ✅ — a filename/extension → glyph registry sharing nxvim-tree's
+- **`icons.lua`** ✅ — a filename/extension → glyph registry sharing bemtvi-tree's
   Nerd-Font codepoints; `configure{ enabled, provider }` (from `options.icons_enabled` /
   `options.icon_provider`), `register(map)` overrides (surfaced as
-  `require("nxvim-line").register_icons`), and an `icon` provider hook (a
+  `require("bemtvi-line").register_icons`), and an `icon` provider hook (a
   devicons-equivalent) that wins over the tables. `enabled = false` returns nil for every
   lookup so components render plain. The `filetype`/`branch`/`diagnostics` components emit
   their own default glyphs gated on `icons.enabled()`.
 - **`highlights.lua`** ✅ — `color_group(color)` interns a lualine `color` (a `{ fg, bg,
-  sp, gui }` table → a generated `NxLineColor<N>` group via `nx.hl.define`, cached by
+  sp, gui }` table → a generated `BtvLineColor<N>` group via `btv.hl.define`, cached by
   value; a string → the group name used as-is) and translates `gui = "bold,italic"` to
-  the nx.hl boolean attrs. `reset()` clears the cache each build so the group names don't
+  the btv.hl boolean attrs. `reset()` clears the cache each build so the group names don't
   grow unbounded across rebuilds.
 - **The render pass** (`compile.lua`) ✅ — per component: a leading `icon` override, the
   `color` override applied to every cell, then `padding` (number or `{ left, right }`,
@@ -229,7 +229,7 @@ with `test/style_spec.lua`. **31 tests pass.**
   disabled / provider / register); colour interning + caching + the string pass-through;
   the component separator glyph appears between two components and an empty separator
   degrades; padding widens the cell; a per-component `color` table defines + applies its
-  group (observed via `nx.hl`, since the status mirror carries text only).
+  group (observed via `btv.hl`, since the status mirror carries text only).
 
 **Honest scope (reordered from the original sketch):**
 - **Section separators (the powerline arrows *between* sections) move to Phase 4.** The
@@ -256,7 +256,7 @@ in this phase too.
 
 Notes from the build:
 - **`themes.lua`** ✅ — `resolve(theme)`: a table is used as-is; `"auto"` derives from the
-  colorscheme via `nx.hl.get` (section-A accent per mode from `Function`/`String`/… , b/c
+  colorscheme via `btv.hl.get` (section-A accent per mode from `Function`/`String`/… , b/c
   from `StatusLine`/`Normal`, every read with a fallback so it never yields a nil cell); a
   name resolves **bundled (`default`) → `require("lualine.themes.<name>")` → hard error**.
   `normalize` fills **x/y/z from c/b/a** and **any unspecified mode from `normal`**, and a
@@ -268,14 +268,14 @@ Notes from the build:
   those groups applies); `section_group`/`transition_group` pick by the current mode at
   render. The transition group paints the powerline arrow `fg = from-section bg`, `bg =
   to-section bg` (lazily defined + cached). Nothing on the hot path but a name lookup.
-- **Mode-reactive render** ✅ — each section reads `nx.mode()`, maps it through `mode_of`,
+- **Mode-reactive render** ✅ — each section reads `btv.mode()`, maps it through `mode_of`,
   and paints its nil-highlight cells in `lualine_<section>_<mode>`; a component with its
   own `color`/per-severity `hl` keeps it (opts out). The powerline arrow is appended (left
   half, into the next present section / fill) or prepended (right half, from the previous /
   fill), so the chevrons point outward from the centre. A section that renders empty this
   frame emits nothing (no stray arrows).
 - **The driver** ✅ — `ModeChanged` is folded into every section's event union (reusing
-  `nx.statusline`'s idempotent per-segment autocmd wiring), so all sections recolour on a
+  `btv.statusline`'s idempotent per-segment autocmd wiring), so all sections recolour on a
   mode transition; the groups are pre-defined, so the re-render is just a group pick.
 - **Observability** — the status mirror carries text only, so a `compile._last` seam
   records the cells each segment last emitted; the mode-flip test reads cell `hl` there.
@@ -293,28 +293,28 @@ Notes from the build:
   highlight group to link to**. Resolution mirrors lualine: `options.theme` is a table
   (used as-is), or a name resolved **bundled theme → `require("lualine.themes.<name>")`
   → error** — so `theme = "catppuccin"` loads catppuccin's own lualine theme module
-  (a self-contained palette table; it works because nxvim already runs catppuccin's
+  (a self-contained palette table; it works because bemtvi already runs catppuccin's
   colorscheme and the theme module is pure Lua on the runtimepath). `auto` derives a
-  palette by reading the active colorscheme via `nx.hl.get` (`Normal`, `StatusLine`,
+  palette by reading the active colorscheme via `btv.hl.get` (`Normal`, `StatusLine`,
   `Function`, `String`, `Error`, …). `register_theme(name, table)` adds one.
 - **Highlight groups, lualine-named, pre-defined once.** `compile`/`highlights` defines a
   group per `(section, mode)` from the theme up front under **lualine's own naming** —
   `lualine_<section>_<mode>` (e.g. `lualine_a_normal`, `lualine_a_insert`,
-  `lualine_c_inactive`) via `nx.hl.define`. Using lualine's *highlight-group* names
+  `lualine_c_inactive`) via `btv.hl.define`. Using lualine's *highlight-group* names
   (rather than a private group scheme) means a colorscheme or user override that already
   styles `lualine_a_normal` just applies, and the surface is the one lualine users know.
-  (The `nx.statusline` *segment* registry names — `NxLineA`…`NxLineZ` — are a separate,
+  (The `btv.statusline` *segment* registry names — `BtvLineA`…`BtvLineZ` — are a separate,
   private namespace and don't collide with these groups.) x/y/z link to the c/b/a group
   of the same mode. Nothing is created on the hot path. The mode key comes from a
   **mode-code → theme-mode** resolver (`n → normal`, `i → insert`, `v`/`V → visual`,
   `R → replace`, `c → command`, `t → terminal`; unknown → `normal`).
 - **Mode-reactive render.** Each section's `render(ctx)` reads the current mode
-  (`nx.mode()`), maps it through the resolver, and emits its cells (and the powerline
+  (`btv.mode()`), maps it through the resolver, and emits its cells (and the powerline
   separator transition cells, whose colours depend on the adjacent sections' *current*
   bg) in the mode-appropriate `lualine_*` groups. So the `mode` component becomes a
   **custom** cell here (carrying its mode group), rather than the Phase-1 built-in
   pass-through.
-- **The driver.** One `nx.autocmd.create("ModeChanged", { pattern = "*:*", callback })`
+- **The driver.** One `btv.autocmd.create("ModeChanged", { pattern = "*:*", callback })`
   invalidates every theme-coloured section. Because the groups are pre-defined and
   `render` just picks by the new mode, the re-render is cheap; mode changes are infrequent
   (never per-keystroke), so this is well within the no-frame-time-Lua budget. (A component
@@ -344,11 +344,11 @@ registry + the refresh timer), with `test/runtime_spec.lua`. **44 tests pass.**
   `icon` → `color` → `on_click`. A callback error becomes a loud `E:<name>` cell.
 - **`on_click`** ✅ — a per-component `on_click = function(clicks, button, mods)` is
   assigned a build-time id (`compile._clicks`); the cell carries
-  `v:lua.require'nxvim-line.compile'._click(id)`, and `_click` adapts neovim's
+  `v:lua.require'bemtvi-line.compile'._click(id)`, and `_click` adapts neovim's
   `(minwid, clicks, button, mods)` to lualine's signature. (A fix this surfaced: cell
   padding must mutate `text` in place, not rebuild the cell, or it drops `on_click`.)
 - **`refresh`** ✅ — `options.refresh = { statusline = ms }` arms a re-arming one-shot
-  `nx.timer` (default 1000ms) that invalidates every active segment each interval; a
+  `btv.timer` (default 1000ms) that invalidates every active segment each interval; a
   generation token makes a rebuild supersede the prior loop, and `ms ≤ 0` disables it.
   Mode colour is event-driven (`ModeChanged`), so the timer stays coarse with no lag.
 - **`globalstatus`** ✅ (since Phase 1) — `true` → `laststatus = 3`; inactive layouts
@@ -366,7 +366,7 @@ function as the component *itself* is the separate feature still to come.
 
 ## Phase 6 — Git polish (`git.lua`) ✅ (done)
 
-The async `git.lua` source **landed in Phase 2** (branch + per-file diff via `nx.run`,
+The async `git.lua` source **landed in Phase 2** (branch + per-file diff via `btv.run`,
 cached per file, invalidating only the hosting segments; non-repo buffers show nothing).
 This phase added the robustness — the "editor must never freeze" rule applied to a slow
 repo. **46 tests pass.**
@@ -379,7 +379,7 @@ repo. **46 tests pass.**
   (deduped by key) and `pump` as slots free, so opening many buffers never spawns an
   unbounded pile of `git` processes. A key already inflight is a no-op.
 - **A `.git` watch** ✅ — on a successful fetch, a **best-effort** (pcall'd, after the data
-  is published so it can never starve the invalidation) `nx.fs.watch` on the repo's
+  is published so it can never starve the invalidation) `btv.fs.watch` on the repo's
   `--absolute-git-dir` is armed once per git-dir; an external HEAD/index change (commit,
   checkout, stage) schedules a debounced refresh of the visible bar. Our own git reads
   never write `.git`, so the watch can't self-trigger.
@@ -399,7 +399,7 @@ Landed as `extensions.lua` + the layout-pick / tabline lowering in `compile.lua`
 - **`extensions.lua`** ✅ — per-filetype layout overrides (lualine's `extensions`).
   `resolve(list)` turns bundled names and/or inline `{ filetypes, sections,
   inactive_sections }` tables into normalized entries `{ fts, sections, inactive_sections }`
-  (validating each component, erroring loud on an unknown name). Bundled: `nxvim-tree`
+  (validating each component, erroring loud on an unknown name). Bundled: `bemtvi-tree`
   (`nvim-tree` alias) → a `\u{f07b} Files` title, `quickfix` → a `Quickfix` label + the
   location. `register_extension(name, ext)` adds one. The new `label` component
   (`{ "label", text = … }`) is the static-title building block.
@@ -411,7 +411,7 @@ Landed as `extensions.lua` + the layout-pick / tabline lowering in `compile.lua`
   inactive + every extension's sections.
 - **`tabline`** ✅ — `_tabline()` lowers the `tabline` section components to a `%`-format
   string (each cell → a `%#group#text` run with `%`-escaped text; `%=` splits the halves),
-  wired live via `vim.o.tabline = "%!v:lua.require('nxvim-line.compile')._tabline()"` with
+  wired live via `vim.o.tabline = "%!v:lua.require('bemtvi-line.compile')._tabline()"` with
   `showtabline = 2`. A segment layout never applies to the tabline (core design), so this
   is the `%`-format path the core eval (`v:lua.` stripped, run inline) supports. An empty
   tabline clears only what we set. **Winbar is out of scope** (no `winbar` option in core).
@@ -431,8 +431,8 @@ The plugin is feature-complete. **53 tests pass.**
   plugin from the checkout via a `dir=` spec, plus `sample.lua`. `test/example_spec.lua`
   runs that exact config end-to-end (renders mode + location, no component errors), so the
   example can't silently drift.
-- **`doc/nxvim-line.txt`** ✅ — the vim-help-format manual surfaced by nxvim-help
-  (`:help nxvim-line`); no `tags` file (auto-derived from the `*anchors*`). Covers setup,
+- **`doc/bemtvi-line.txt`** ✅ — the vim-help-format manual surfaced by bemtvi-help
+  (`:help bemtvi-line`); no `tags` file (auto-derived from the `*anchors*`). Covers setup,
   every option, sections + the component spellings, every component + its options, themes
   (using + writing + the `lualine_*` groups), extensions, the tabline, the full API, and a
   "writing a custom component" worked example.
@@ -440,7 +440,7 @@ The plugin is feature-complete. **53 tests pass.**
   and an "Extending" section (custom component / theme / extension / icons), corrected to
   the implemented surface (no inline-function component; `padding` not `separator`).
 - **Perf** ✅ — no per-frame Lua by construction: the built-in segments resolve natively in
-  `nxvim-core` every frame, and the custom section segments run `render` ONLY on
+  `bemtvi-core` every frame, and the custom section segments run `render` ONLY on
   invalidation (a declared event, `ModeChanged`, a git update, or the opt-out `refresh`
   timer) — the server caches the published cells and paints them until the next
   invalidation (ADR 0002 rule 4). Git is debounced + bounded (Phase 6); every timer is
@@ -451,8 +451,8 @@ The plugin is feature-complete. **53 tests pass.**
 ## Status: COMPLETE
 
 All eight phases landed, plus the post-v1 deferred items (inline-function components,
-`searchcount`, `fileformat`). nxvim-line is a feature-complete, lualine-style statusline
-built entirely on the native `nx.statusline` primitive: the lualine config shape (sections,
+`searchcount`, `fileformat`). bemtvi-line is a feature-complete, lualine-style statusline
+built entirely on the native `btv.statusline` primitive: the lualine config shape (sections,
 components, themes, separators, extensions, tabline) lowered onto ordered native segments,
 with the hot path in Rust. Only winbar stays out of scope — a large core feature, not a
 small addition (see *Out of scope*).
@@ -462,7 +462,7 @@ small addition (see *Out of scope*).
 ## The public Lua API (stable target)
 
 ```lua
-local line = require("nxvim-line")
+local line = require("bemtvi-line")
 
 line.setup({
   options = {
@@ -470,7 +470,7 @@ line.setup({
     globalstatus = false,                    -- laststatus = 3 when true
     section_separators = { left = "", right = "" },
     component_separators = { left = "", right = "" },
-    disabled_filetypes = { statusline = { "nxvim-tree" } },
+    disabled_filetypes = { statusline = { "bemtvi-tree" } },
     refresh = { statusline = 1000 },
   },
   sections = {
@@ -483,7 +483,7 @@ line.setup({
   },
   inactive_sections = { lualine_c = { "filename" }, lualine_x = { "location" } },
   tabline = {},
-  extensions = { "nxvim-tree", "quickfix" },
+  extensions = { "bemtvi-tree", "quickfix" },
 })
 
 -- extension points
@@ -506,15 +506,15 @@ The three items the phases deferred have landed (commits after Phase 8):
   whole pipeline (fmt/icon/color/on_click/padding) on top.
 - **`searchcount`** — pure plugin, no core change: the pattern is the read-only `/`
   register (`vim.fn.getreg('/')`); matches are enumerated WITH positions via the native
-  `nx.buf.search` (vim engine), so the cursor's index is exact. Bounded by `maxcount`.
-- **`fileformat`** — a small core addition (nxvim repo): a `'fileformat'` buffer option
+  `btv.buf.search` (vim engine), so the cursor's index is exact. Bounded by `maxcount`.
+- **`fileformat`** — a small core addition (bemtvi repo): a `'fileformat'` buffer option
   (unix/dos/mac), detected from the bytes on read (the rope normalized to `\n`), honored on
   write (`to_save_bytes` converts), settable via `:set ff=`, and mirrored to
-  `nx.bo.fileformat`. The component reads that mirror.
+  `btv.bo.fileformat`. The component reads that mirror.
 
 ## Out of scope (v1)
 
-- **Winbar** — needs a `'winbar'` option in nxvim-core: a per-window bar is a separate,
+- **Winbar** — needs a `'winbar'` option in bemtvi-core: a per-window bar is a separate,
   large core feature spanning the layout model, the `View` protocol, and every client
   renderer (TUI/GUI/web) — far beyond a plugin or a small core addition.
 - **Tabline beyond `%`-format lowering** — clickable per-tab segment regions on the

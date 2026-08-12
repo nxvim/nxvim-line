@@ -1,36 +1,36 @@
--- nxvim-line — a fully-featured, lualine-style statusline for nxvim, built entirely
--- on the native `nx.statusline` segment registry (ADR 0002): no buffer mutation, no
+-- bemtvi-line — a fully-featured, lualine-style statusline for bemtvi, built entirely
+-- on the native `btv.statusline` segment registry (ADR 0002): no buffer mutation, no
 -- native widget, no per-frame Lua.
 --
 -- It is a COMPILER, not a renderer. The editor already owns the statusline: the
--- `nx.statusline` primitive composes ordered *segments* (built-in ones that resolve
+-- `btv.statusline` primitive composes ordered *segments* (built-in ones that resolve
 -- natively every frame — `mode`/`location`/`diagnostics`/… — and custom Lua segments
 -- that run `render(ctx)` only when invalidated) into the styled `status` arrays every
--- client already paints. nxvim-line takes a familiar lualine-shaped config —
+-- client already paints. bemtvi-line takes a familiar lualine-shaped config —
 -- sections `a..z`, components with icons / separators / colors / conditions / themes —
 -- and LOWERS it onto that primitive: it registers the custom segments, defines the
 -- highlight groups, and wires the invalidation events. The hot path stays in Rust.
 --
 -- Module map (one concern each — filled in across the phased plan in
--- docs/plans/2026-06-21-nxvim-line.md):
+-- docs/plans/2026-06-21-bemtvi-line.md):
 --   config.lua      defaults + validated merge of the lualine-shaped config  (Phase 1 ✅)
---   compile.lua     config -> native nx.statusline segments + event wiring   (Phase 1 ✅)
+--   compile.lua     config -> native btv.statusline segments + event wiring   (Phase 1 ✅)
 --   components.lua  the component registry + library                         (Phase 1 ✅, grows)
 --   highlights.lua  per-section / per-mode highlight groups + separators      (Phase 3/4)
 --   themes/         theme tables + colorscheme auto-derive                    (Phase 4)
---   git.lua         async branch + diff counts via nx.git.*                   (Phase 6)
+--   git.lua         async branch + diff counts via btv.git.*                   (Phase 6)
 --   icons.lua       filetype/extension -> glyph registry                      (Phase 3)
 --   extensions.lua  per-filetype layout overrides                            (Phase 7)
 --
 -- Quick start (init.lua):
---   require("nxvim-line").setup({ options = { theme = "auto" } })
+--   require("bemtvi-line").setup({ options = { theme = "auto" } })
 
-local config = require("nxvim-line.config")
-local compile = require("nxvim-line.compile")
-local components = require("nxvim-line.components")
-local icons = require("nxvim-line.icons")
-local themes = require("nxvim-line.themes")
-local extensions = require("nxvim-line.extensions")
+local config = require("bemtvi-line.config")
+local compile = require("bemtvi-line.compile")
+local components = require("bemtvi-line.components")
+local icons = require("bemtvi-line.icons")
+local themes = require("bemtvi-line.themes")
+local extensions = require("bemtvi-line.extensions")
 
 local M = {}
 
@@ -38,7 +38,7 @@ local M = {}
 M.config = nil
 
 -- setup(opts): merge `opts` over the defaults, validate, and lower the result onto
--- nx.statusline. Idempotent — calling it again tears down the prior layout/events and
+-- btv.statusline. Idempotent — calling it again tears down the prior layout/events and
 -- rebuilds (no second statusline). Fails loud on a bad config (unknown component, …).
 function M.setup(opts)
   M.config = config.merge(config.defaults(), opts)
@@ -49,7 +49,7 @@ function M.setup(opts)
   -- synthesized palette), and the user can switch it live (`:colorscheme
   -- catppuccin-latte`). Wired once, even across repeated setup() calls.
   if not M._colorscheme_au then
-    M._colorscheme_au = nx.on("ColorScheme", {}, function()
+    M._colorscheme_au = btv.on("ColorScheme", {}, function()
       if M.config then
         compile.build(M.config)
       end
@@ -62,7 +62,7 @@ end
 -- state a component reads but has no event for).
 function M.refresh()
   if not M.config then
-    error("nxvim-line: setup() must be called before refresh()")
+    error("bemtvi-line: setup() must be called before refresh()")
   end
   compile.invalidate_all()
 end

@@ -1,4 +1,4 @@
--- nxvim-line.themes — lualine-shaped theme tables, their resolution, and the
+-- bemtvi-line.themes — lualine-shaped theme tables, their resolution, and the
 -- colorscheme auto-derive.
 --
 -- A theme is a per-mode palette in lualine's EXACT shape so an existing lualine theme (or
@@ -13,13 +13,13 @@
 --
 -- Resolution (`resolve`): a table is used as-is; a string name resolves bundled →
 -- `require("lualine.themes.<name>")` → hard error; `"auto"` derives a palette from the
--- active colorscheme via `nx.hl.get`. `register(name, table)` adds a bundled theme.
+-- active colorscheme via `btv.hl.get`. `register(name, table)` adds a bundled theme.
 
 local M = {}
 
 local ALL_MODES = { "normal", "insert", "visual", "replace", "command", "terminal", "inactive" }
 
--- nx.mode() short code → the theme's mode key. Visual-block (`\22` = <C-v>) maps to
+-- btv.mode() short code → the theme's mode key. Visual-block (`\22` = <C-v>) maps to
 -- visual; anything unrecognized falls back to `normal` (lualine's behaviour). Keep the
 -- code set in step with `components.MODE_LABEL`, which labels the same codes.
 local MODE_OF = {
@@ -37,7 +37,7 @@ local MODE_OF = {
   -- intentional rather than incidental, and so this table matches MODE_LABEL's keys.
   niI = "normal",
   niR = "normal",
-  -- nxvim's multi-cursor placement mode. lualine themes have no multicursor
+  -- bemtvi's multi-cursor placement mode. lualine themes have no multicursor
   -- palette, so reuse `visual` (the closest multi-selection colour) — distinct
   -- from normal, and defined by every theme.
   m = "visual",
@@ -82,10 +82,10 @@ M.bundled = {
 -- register(name, table): add a bundled theme (public via register_theme).
 function M.register(name, palette)
   if type(name) ~= "string" then
-    error("nxvim-line.register_theme: name must be a string")
+    error("bemtvi-line.register_theme: name must be a string")
   end
   if type(palette) ~= "table" then
-    error("nxvim-line.register_theme: palette must be a table")
+    error("bemtvi-line.register_theme: palette must be a table")
   end
   M.bundled[name] = palette
 end
@@ -98,10 +98,10 @@ end
 -- {fg,bg,gui} table or a group-name string — define_theme handles each).
 function M.normalize(palette)
   if type(palette) ~= "table" or type(palette.normal) ~= "table" then
-    error("nxvim-line: a theme needs a `normal` palette with at least section `a`")
+    error("bemtvi-line: a theme needs a `normal` palette with at least section `a`")
   end
   local base = palette.normal
-  local base_a = base.a or error("nxvim-line: a theme's `normal` palette needs section `a`")
+  local base_a = base.a or error("bemtvi-line: a theme's `normal` palette needs section `a`")
   local base_b = base.b or base_a
   local base_c = base.c or base_b
   local out = {}
@@ -125,10 +125,10 @@ end
 -- ----- auto-derive from the active colorscheme -------------------------------
 
 local function hl(name)
-  return nx.hl.get(0, { name = name, link = false }) or {}
+  return btv.hl.get(0, { name = name, link = false }) or {}
 end
 
--- A 0xRRGGBB int (nx.hl.get's colour form) → "#rrggbb", or the fallback when absent.
+-- A 0xRRGGBB int (btv.hl.get's colour form) → "#rrggbb", or the fallback when absent.
 local function hex(v, fallback)
   if type(v) == "number" then
     return string.format("#%06x", v)
@@ -144,7 +144,7 @@ end
 -- a hand-tuned palette that reads far better than anything synthesized. Only when no
 -- such theme exists do we synthesize a powerline palette.
 --
--- The synthesized accents come from `nx.hl.palette()` — the editor's canonical
+-- The synthesized accents come from `btv.hl.palette()` — the editor's canonical
 -- reading of the active theme's semantic hues, each resolved through a CHAIN of
 -- groups (blue = Function → Directory → Title, and so on) rather than from a single
 -- group that a partial theme may not define. That is what keeps the bar in the
@@ -160,7 +160,7 @@ function M.derive_auto()
     end
   end
 
-  local p = nx.hl.palette()
+  local p = btv.hl.palette()
   local statusline, statuslinenc = hl("StatusLine"), hl("StatusLineNC")
   local bg, fg = p.bg, p.fg
   local sl_bg = hex(statusline.bg, p.bg_alt)
@@ -218,14 +218,14 @@ function M.resolve(theme)
       return M.normalize(mod)
     end
     error(
-      "nxvim-line: unknown theme '"
+      "bemtvi-line: unknown theme '"
         .. theme
         .. "' (not bundled, and require('lualine.themes."
         .. theme
         .. "') failed)"
     )
   end
-  error('nxvim-line: `theme` must be a string name, "auto", or a palette table')
+  error('bemtvi-line: `theme` must be a string name, "auto", or a palette table')
 end
 
 return M

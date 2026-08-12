@@ -1,6 +1,6 @@
--- nxvim-line.git: the async git data source for the `branch` / `diff` components.
+-- bemtvi-line.git: the async git data source for the `branch` / `diff` components.
 --
--- Queries git off the editor tick via the native `nx.git.*` API, caches per file, and invalidates the
+-- Queries git off the editor tick via the native `btv.git.*` API, caches per file, and invalidates the
 -- hosting segments when fresh data lands. The components' `provide` calls `ensure(buf)`
 -- (kick a fetch if nothing is cached for this file yet) and reads `get(buf)`. Because a
 -- custom segment re-renders whenever its window's buffer changes — a switch, OR a fresh
@@ -26,7 +26,7 @@ M._inflight = {} -- key -> true while its fetch is running
 M._on_update = nil
 M._au = {}
 M._debounce = {} -- key -> pending debounce timer handle
-M._watches = {} -- absolute git-dir -> nx.fs.watch handle
+M._watches = {} -- absolute git-dir -> btv.fs.watch handle
 M._queue = {} -- bounded-runner backlog: { { k, file, dir }, … } (deduped by key)
 M._active = 0 -- git fetches currently running
 M._max = 4 -- concurrency cap
@@ -36,12 +36,12 @@ M._stats = { runs = 0 } -- introspection/tests: actual git fetches executed
 M.debounce_ms = 120
 
 local function key(buf)
-  local name = nx.buf.name(buf)
+  local name = btv.buf.name(buf)
   return name ~= "" and name or vim.fn.getcwd()
 end
 
 local function dir_of(buf)
-  local name = nx.buf.name(buf)
+  local name = btv.buf.name(buf)
   if name ~= "" then
     return name:match("^(.*)/[^/]*$") or "."
   end
@@ -64,10 +64,10 @@ end
 local function is_git_buffer(buf)
   -- Validity is checked inside `is_file_buffer` rather than at each call site: a debounced
   -- refresh lands a tick or more after it was scheduled, by which time the buffer may be
-  -- gone (`:bd`, a closed panel), and no path may then resolve `nx.buf.name` on a dead
+  -- gone (`:bd`, a closed panel), and no path may then resolve `btv.buf.name` on a dead
   -- handle and fall back to cwd — which would fetch the SESSION's branch under a key
   -- nothing displays.
-  return require("nxvim-line.components").is_file_buffer(buf)
+  return require("bemtvi-line.components").is_file_buffer(buf)
 end
 
 function M.get(buf)
@@ -111,21 +111,21 @@ function run_fetch(k, file, dir)
     M._active = M._active - 1
     pump()
   end
-  nx.async(function()
-    -- Branch via the native `nx.git.head` (replaces `git rev-parse --abbrev-ref HEAD`).
+  btv.async(function()
+    -- Branch via the native `btv.git.head` (replaces `git rev-parse --abbrev-ref HEAD`).
     -- A path outside a repo REJECTS (ENOREPO) — swallow it and leave `branch` nil, the
     -- old "code ~= 0 → no branch" behavior. An unborn HEAD still reports its branch name.
     local branch
-    local ok_head, head = pcall(nx.await, nx.git.head(dir))
+    local ok_head, head = pcall(btv.await, btv.git.head(dir))
     if ok_head and head.branch and head.branch ~= "" then
       branch = head.branch
     end
-    -- Per-file working-tree-vs-HEAD counts via the native `nx.git.diff_file` (replaces
+    -- Per-file working-tree-vs-HEAD counts via the native `btv.git.diff_file` (replaces
     -- `git diff -U0` + the hand-rolled `@@`-hunk parser). It resolves right to
     -- { added, changed, removed } — the exact shape the components read.
     local diff
     if branch and file ~= "" then
-      local ok_diff, d = pcall(nx.await, nx.git.diff_file(dir, file))
+      local ok_diff, d = pcall(btv.await, btv.git.diff_file(dir, file))
       if ok_diff then
         diff = d
       end
@@ -139,16 +139,16 @@ function run_fetch(k, file, dir)
     end
     -- Best-effort: set up (once) a watch on this repo's .git so an external HEAD/index
     -- change (commit / checkout / stage) refreshes the bar. Any failure is swallowed.
-    -- `nx.git.discover` gives the absolute git-dir (replaces `rev-parse --absolute-git-dir`).
+    -- `btv.git.discover` gives the absolute git-dir (replaces `rev-parse --absolute-git-dir`).
     if branch then
       pcall(function()
-        local disc = nx.await(nx.git.discover(dir))
+        local disc = btv.await(btv.git.discover(dir))
         ensure_watch(disc.git_dir)
       end)
     end
   end)():catch(function(e)
     release()
-    nx.notify("nxvim-line.git: " .. tostring(e), 4)
+    btv.notify("bemtvi-line.git: " .. tostring(e), 4)
   end)
 end
 
@@ -162,7 +162,7 @@ local function do_refresh(buf)
   if M._inflight[k] then
     return
   end
-  local file, dir = nx.buf.name(buf), dir_of(buf)
+  local file, dir = btv.buf.name(buf), dir_of(buf)
   if M._active >= M._max then
     for _, r in ipairs(M._queue) do
       if r.k == k then
@@ -186,7 +186,7 @@ function M.schedule(buf)
   if h then
     h:stop()
   end
-  M._debounce[k] = nx.timer(function()
+  M._debounce[k] = btv.timer(function()
     M._debounce[k] = nil
     do_refresh(buf)
   end, M.debounce_ms)
@@ -212,7 +212,7 @@ function ensure_watch(gitdir)
   if gitdir == "" or M._watches[gitdir] then
     return
   end
-  local w = nx.fs.watch(gitdir, { recursive = false })
+  local w = btv.fs.watch(gitdir, { recursive = false })
   M._watches[gitdir] = w
   local function loop()
     w:next()
@@ -220,7 +220,7 @@ function ensure_watch(gitdir)
         if ev == nil then
           return -- stopped
         end
-        M.schedule(nx.buf.current())
+        M.schedule(btv.buf.current())
         loop()
       end)
       :catch(function()
@@ -233,15 +233,15 @@ end
 function M.activate(on_update)
   M._on_update = on_update
   for _, id in ipairs(M._au) do
-    pcall(nx.autocmd.del, id)
+    pcall(btv.autocmd.del, id)
   end
   M._au = {}
   -- A write (diff) or cwd change (branch) force a re-fetch; BufEnter arms the repo watch
   -- for a newly-visited file's repo. All debounced so a burst collapses.
   for _, ev in ipairs({ "BufWritePost", "DirChanged", "BufEnter" }) do
-    M._au[#M._au + 1] = nx.autocmd.create(ev, {
+    M._au[#M._au + 1] = btv.autocmd.create(ev, {
       callback = function()
-        M.schedule(nx.buf.current())
+        M.schedule(btv.buf.current())
       end,
     })
   end
@@ -249,7 +249,7 @@ end
 
 function M.deactivate()
   for _, id in ipairs(M._au) do
-    pcall(nx.autocmd.del, id)
+    pcall(btv.autocmd.del, id)
   end
   M._au = {}
   for k, h in pairs(M._debounce) do

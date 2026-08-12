@@ -2,12 +2,12 @@
 -- component, both layouts, a theme, extensions, and a tabline together. This guards the
 -- runnable example against drift (the example-config convention).
 --
---     nxvim --test-plugin ~/work/nxvim-plugins/nxvim-line
+--     bemtvi --test-plugin ~/work/bemtvi-plugins/bemtvi-line
 
-local line = require("nxvim-line")
+local line = require("bemtvi-line")
 
-nx.test.describe("nxvim-line.example", function()
-  nx.test.it("the full lualine-style config renders", function(t)
+btv.test.describe("bemtvi-line.example", function()
+  btv.test.it("the full lualine-style config renders", function(t)
     line.setup({
       options = { theme = "auto", globalstatus = true },
       sections = {
@@ -24,16 +24,16 @@ nx.test.describe("nxvim-line.example", function()
         lualine_c = { { "filename", path = 1 } },
         lualine_x = { "location" },
       },
-      extensions = { "nxvim-tree", "quickfix" },
-      tabline = { lualine_a = { { "label", text = "nxvim-line" } } },
+      extensions = { "bemtvi-tree", "quickfix" },
+      tabline = { lualine_a = { { "label", text = "bemtvi-line" } } },
     })
     t:feed("<Esc>")
     local sl = t:wait_for(function()
       local s = t:statusline()
       return s:find("NORMAL") and s:find("1:1") and s
     end)
-    nx.test.expect(sl).to_contain("NORMAL") -- section A (mode)
-    nx.test.expect(sl).to_contain("1:1") -- section Z (location)
-    nx.test.expect(sl).never.to_contain("E:") -- no component errored
+    btv.test.expect(sl).to_contain("NORMAL") -- section A (mode)
+    btv.test.expect(sl).to_contain("1:1") -- section Z (location)
+    btv.test.expect(sl).never.to_contain("E:") -- no component errored
   end)
 end)

@@ -1,8 +1,8 @@
--- nxvim-line.highlights — per-component colour groups + the gui-attr translation.
+-- bemtvi-line.highlights — per-component colour groups + the gui-attr translation.
 --
 -- A lualine `color` is either a highlight-group NAME (used as the cell `hl` unchanged —
 -- the cell links to it) or a `{ fg, bg, sp, gui }` table. A table is *interned*: defined
--- once as a generated `NxLineColor<N>` group via `nx.hl.define` and cached by a canonical
+-- once as a generated `BtvLineColor<N>` group via `btv.hl.define` and cached by a canonical
 -- key so repeated renders reuse the same group. `reset()` clears the cache + counter on
 -- each fresh setup() so the group names never grow unbounded across rebuilds (the
 -- idempotent-setup contract).
@@ -43,7 +43,7 @@ function M.reset()
   sep_cache = {}
 end
 
--- lualine's `gui = "bold,italic"` string → the nx.hl boolean attrs.
+-- lualine's `gui = "bold,italic"` string → the btv.hl boolean attrs.
 local GUI_ATTRS = {
   bold = true,
   italic = true,
@@ -76,19 +76,19 @@ function M.color_group(color)
     return color
   end
   if type(color) ~= "table" then
-    error("nxvim-line: a component `color` must be a string (group) or a { fg, bg, gui } table")
+    error("bemtvi-line: a component `color` must be a string (group) or a { fg, bg, gui } table")
   end
   local k = key_of(color)
   if cache[k] then
     return cache[k]
   end
   counter = counter + 1
-  local name = "NxLineColor" .. counter
+  local name = "BtvLineColor" .. counter
   local spec = { fg = color.fg, bg = color.bg, sp = color.sp }
   if color.gui ~= nil then
     apply_gui(spec, color.gui)
   end
-  nx.hl.define(0, name, spec)
+  btv.hl.define(0, name, spec)
   cache[k] = name
   return name
 end
@@ -103,7 +103,7 @@ local FG_ATTRS = { "bold", "italic", "underline", "undercurl", "strikethrough", 
 --
 -- `chain` is the canonical groups that carry that meaning, most specific first; the first
 -- one defining a foreground wins. When the theme defines none of them the colour comes
--- from `nx.hl.palette()[hue]` — the editor's own reading of the theme's hues, each
+-- from `btv.hl.palette()[hue]` — the editor's own reading of the theme's hues, each
 -- resolved through its own chain — so the count still lands in the running colorscheme's
 -- palette instead of a hardcoded hex belonging to some other theme.
 --
@@ -120,15 +120,15 @@ function M.accent(chain, hue)
   end
   local fg
   for _, name in ipairs(chain) do
-    local def = nx.hl.get(0, { name = name, link = false })
+    local def = btv.hl.get(0, { name = name, link = false })
     if type(def.fg) == "number" then
       fg = def.fg
       break
     end
   end
   accent_counter = accent_counter + 1
-  local name = "NxLineAccent" .. accent_counter
-  nx.hl.define(0, name, { fg = fg or nx.hl.palette()[hue] })
+  local name = "BtvLineAccent" .. accent_counter
+  btv.hl.define(0, name, { fg = fg or btv.hl.palette()[hue] })
   accent_cache[key] = name
   return name
 end
@@ -158,8 +158,8 @@ function M.fg_on_section(group, section)
   if fg_cache[k] then
     return fg_cache[k]
   end
-  local src = nx.hl.get(0, { name = group, link = false })
-  local sec = nx.hl.get(0, { name = section, link = false })
+  local src = btv.hl.get(0, { name = group, link = false })
+  local sec = btv.hl.get(0, { name = section, link = false })
   if src.bg ~= nil or sec.bg == nil then
     fg_cache[k] = group
     return group
@@ -169,14 +169,14 @@ function M.fg_on_section(group, section)
     return section
   end
   fg_counter = fg_counter + 1
-  local name = "NxLineFg" .. fg_counter
+  local name = "BtvLineFg" .. fg_counter
   local spec = { fg = src.fg, bg = sec.bg, sp = src.sp }
   for _, attr in ipairs(FG_ATTRS) do
     if src[attr] then
       spec[attr] = true
     end
   end
-  nx.hl.define(0, name, spec)
+  btv.hl.define(0, name, spec)
   fg_cache[k] = name
   return name
 end
@@ -190,13 +190,13 @@ local MODES = { "normal", "insert", "visual", "replace", "command", "terminal", 
 -- to that group, a `{ fg, bg, gui }` cell is concrete (with the gui attrs expanded).
 local function define_cell(name, cell)
   if type(cell) == "string" then
-    nx.hl.define(0, name, { link = cell })
+    btv.hl.define(0, name, { link = cell })
   elseif type(cell) == "table" then
     local spec = { fg = cell.fg, bg = cell.bg, sp = cell.sp }
     if cell.gui ~= nil then
       apply_gui(spec, cell.gui)
     end
-    nx.hl.define(0, name, spec)
+    btv.hl.define(0, name, spec)
   end
 end
 
@@ -231,13 +231,13 @@ end
 -- transition. Defined lazily + cached. A string-link palette cell has no readable bg, so
 -- the side falls back to nil (a degraded, uncoloured transition) rather than erroring.
 function M.transition_group(from, to, mode)
-  local name = "NxLineSep_" .. from .. "_" .. to .. "_" .. mode
+  local name = "BtvLineSep_" .. from .. "_" .. to .. "_" .. mode
   if sep_cache[name] then
     return name
   end
   local p = theme_palette and theme_palette[mode]
   local from_cell, to_cell = p and p[from], p and p[to]
-  nx.hl.define(0, name, {
+  btv.hl.define(0, name, {
     fg = type(from_cell) == "table" and from_cell.bg or nil,
     bg = type(to_cell) == "table" and to_cell.bg or nil,
   })

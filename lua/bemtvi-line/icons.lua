@@ -1,7 +1,7 @@
--- nxvim-line.icons — the filename/extension → glyph registry for the `filetype`
+-- bemtvi-line.icons — the filename/extension → glyph registry for the `filetype`
 -- component (and any component that wants a leading icon).
 --
--- A pure-Lua lookup seeded with common file kinds, sharing nxvim-tree's Nerd-Font v3
+-- A pure-Lua lookup seeded with common file kinds, sharing bemtvi-tree's Nerd-Font v3
 -- codepoints so the two plugins agree on glyphs. Glyphs are written as `\u{...}` escapes
 -- so the source stays plain ASCII and survives any transport that mangles raw PUA bytes;
 -- each encodes to a 3-byte UTF-8 sequence the renderer measures by byte length.
@@ -91,7 +91,7 @@ function M.enabled()
 end
 
 -- Accept a glyph as a bare string or as a `{ glyph = … }` / `{ … }` table (the
--- nxvim-tree spelling), so a shared icon map drops in. Anything else is a hard error:
+-- bemtvi-tree spelling), so a shared icon map drops in. Anything else is a hard error:
 -- storing the `nil` a malformed spec resolves to used to leave the caller with a glyph
 -- that never appeared and nothing to diagnose (CLAUDE.md: no silent stubs or skips).
 local function glyph_of(v, where)
@@ -103,7 +103,7 @@ local function glyph_of(v, where)
   end
   if type(g) ~= "string" or g == "" then
     error(
-      "nxvim-line.register_icons: "
+      "bemtvi-line.register_icons: "
         .. where
         .. " needs a non-empty glyph string (or a { glyph = … } table), got "
         .. type(v)
@@ -114,7 +114,7 @@ end
 
 -- register(map) — extend the registry. Top-level keys are extensions (`{ rs = "" }`);
 -- a `name = { ["exact.file"] = "" }` (or `by_name` / `by_ext`) sub-table extends the
--- exact-name / extension tables. Surfaced as `require("nxvim-line").register_icons(...)`.
+-- exact-name / extension tables. Surfaced as `require("bemtvi-line").register_icons(...)`.
 function M.register(map)
   for k, v in pairs(map or {}) do
     if k == "name" or k == "by_name" then

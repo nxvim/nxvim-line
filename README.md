@@ -1,6 +1,6 @@
-# nxvim-line
+# bemtvi-line
 
-A fully-featured, **lualine-style** statusline for [nxvim](https://github.com/davidrios/nxvim).
+A fully-featured, **lualine-style** statusline for [bemtvi](https://github.com/davidrios/bemtvi).
 
 Configure it the way you'd configure `lualine.nvim` — sections `a`–`z`, a rich component
 library (mode, branch, diff, diagnostics, filename, filetype + icons, fileformat,
@@ -9,7 +9,7 @@ daemon), themes that recolour by mode, and
 powerline separators:
 
 ```lua
-require("nxvim-line").setup({
+require("bemtvi-line").setup({
   options = { theme = "auto" },
   sections = {
     lualine_a = { "mode" },
@@ -22,10 +22,10 @@ require("nxvim-line").setup({
 })
 ```
 
-nxvim-line is a **compiler, not a renderer**. The editor already owns statusline
-rendering through the native `nx.statusline` segment registry — built-in segments resolve
+bemtvi-line is a **compiler, not a renderer**. The editor already owns statusline
+rendering through the native `btv.statusline` segment registry — built-in segments resolve
 in Rust every frame, and custom Lua segments run only when invalidated by a declared event,
-never per frame (ADR 0002). nxvim-line **lowers** a lualine-shaped config onto that
+never per frame (ADR 0002). bemtvi-line **lowers** a lualine-shaped config onto that
 primitive: one custom segment per section, the theme's highlight groups, and each
 component's invalidation events. The hot path stays in Rust; your config stays familiar.
 
@@ -34,11 +34,11 @@ component's invalidation events. The hot path stays in Rust; your config stays f
 Declare it with the built-in `:Plugins` manager, then `:PluginSync`:
 
 ```lua
-nx.plugins({
+btv.plugins({
   {
-    "davidrios/nxvim-line",
+    "davidrios/bemtvi-line",
     config = function()
-      require("nxvim-line").setup({ options = { theme = "auto" } })
+      require("bemtvi-line").setup({ options = { theme = "auto" } })
     end,
   },
 })
@@ -51,18 +51,18 @@ per-component options, themes, highlight groups, extensions, the tabline, the `r
 API, and writing a custom component — live in the help file. The same source renders both
 on GitHub and in the editor:
 
-- In editor: `:help nxvim-line`
-- On GitHub: [doc/nxvim-line.md](./doc/nxvim-line.md) (the help source)
+- In editor: `:help bemtvi-line`
+- On GitHub: [doc/bemtvi-line.md](./doc/bemtvi-line.md) (the help source)
 
 ## Development
 
-A Lua test suite (`test/*_spec.lua`) runs on nxvim's native `nx.test` framework:
+A Lua test suite (`test/*_spec.lua`) runs on bemtvi's native `btv.test` framework:
 
 ```sh
-nxvim --test-plugin .
+bemtvi --test-plugin .
 ```
 
-The vimdoc `doc/nxvim-line.txt` is **generated** from `doc/nxvim-line.md` via
+The vimdoc `doc/bemtvi-line.txt` is **generated** from `doc/bemtvi-line.md` via
 [panvimdoc](https://github.com/kdheepak/panvimdoc): edit the `.md`, then run
 `bash scripts/gen-vimdoc.sh` (needs `pandoc` + `git`). Never edit the `.txt` by hand.
 

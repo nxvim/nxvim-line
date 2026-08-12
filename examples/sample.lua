@@ -1,5 +1,5 @@
--- A small sample buffer for the nxvim-line demo.
--- Open it (NXVIM_CONFIG=examples nxvim examples/sample.lua), then switch modes
+-- A small sample buffer for the bemtvi-line demo.
+-- Open it (BEMTVI_CONFIG=examples bemtvi examples/sample.lua), then switch modes
 -- (i / v / :) and move the cursor to watch the statusline react.
 
 local function greet(who)

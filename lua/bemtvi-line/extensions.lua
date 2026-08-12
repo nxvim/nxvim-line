@@ -1,4 +1,4 @@
--- nxvim-line.extensions — per-filetype layout overrides (lualine's `extensions`).
+-- bemtvi-line.extensions — per-filetype layout overrides (lualine's `extensions`).
 --
 -- An extension is `{ filetypes = { "qf", … }, sections = { lualine_a = {...}, … },
 -- inactive_sections = {...}? }`: when the rendered window's buffer has one of those
@@ -11,18 +11,18 @@
 -- each component the same way `sections` is (an unknown extension name / component errors
 -- loud). `register(name, ext)` adds a bundled extension.
 
-local config = require("nxvim-line.config")
+local config = require("bemtvi-line.config")
 
 local M = {}
 
--- Bundled extensions. Keyed by lualine-style names; `nxvim-tree` is the native explorer,
+-- Bundled extensions. Keyed by lualine-style names; `bemtvi-tree` is the native explorer,
 -- `nvim-tree` an alias so a ported config's `extensions = { "nvim-tree" }` just works.
 local TREE = {
-  filetypes = { "nxvim-tree", "NvimTree" },
+  filetypes = { "bemtvi-tree", "NvimTree" },
   sections = { lualine_a = { { "label", text = "\u{f07b} Files" } } },
 }
 M.bundled = {
-  ["nxvim-tree"] = TREE,
+  ["bemtvi-tree"] = TREE,
   ["nvim-tree"] = TREE,
   quickfix = {
     filetypes = { "qf", "quickfix" },
@@ -36,10 +36,10 @@ M.bundled = {
 -- register(name, ext): add a bundled extension (public via register_extension).
 function M.register(name, ext)
   if type(name) ~= "string" then
-    error("nxvim-line.register_extension: name must be a string")
+    error("bemtvi-line.register_extension: name must be a string")
   end
   if type(ext) ~= "table" or type(ext.filetypes) ~= "table" then
-    error("nxvim-line.register_extension: an extension needs a `filetypes` list")
+    error("bemtvi-line.register_extension: an extension needs a `filetypes` list")
   end
   M.bundled[name] = ext
 end
@@ -62,16 +62,16 @@ local function normalize_one(entry, i)
   if type(entry) == "string" then
     ext = M.bundled[entry]
     if not ext then
-      error("nxvim-line: unknown extension '" .. entry .. "' (not bundled)")
+      error("bemtvi-line: unknown extension '" .. entry .. "' (not bundled)")
     end
     ext = deepcopy(ext)
   elseif type(entry) == "table" then
     ext = deepcopy(entry)
   else
-    error("nxvim-line: extensions[" .. i .. "] must be a string or a table")
+    error("bemtvi-line: extensions[" .. i .. "] must be a string or a table")
   end
   if type(ext.filetypes) ~= "table" or #ext.filetypes == 0 then
-    error("nxvim-line: extension #" .. i .. " needs a non-empty `filetypes` list")
+    error("bemtvi-line: extension #" .. i .. " needs a non-empty `filetypes` list")
   end
   local fts = {}
   for _, ft in ipairs(ext.filetypes) do

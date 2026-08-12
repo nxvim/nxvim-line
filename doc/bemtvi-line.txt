@@ -1,35 +1,35 @@
-*nxvim-line.txt*                          A lualine-style statusline for nxvim
+*bemtvi-line.txt*                          A lualine-style statusline for bemtvi
 
 ==============================================================================
-Table of Contents                               *nxvim-line-table-of-contents*
+Table of Contents                               *bemtvi-line-table-of-contents*
 
-1. How it works                                      |nxvim-line-how-it-works|
-2. Setup                                                    |nxvim-line-setup|
-3. Options                                                |nxvim-line-options|
-4. Sections                                              |nxvim-line-sections|
-  - Inactive sections                  |nxvim-line-sections-inactive-sections|
-5. Components                                          |nxvim-line-components|
-  - File-only components          |nxvim-line-components-file-only-components|
-  - lsp notes                                |nxvim-line-components-lsp-notes|
-  - searchcount notes                |nxvim-line-components-searchcount-notes|
-6. Component options                            |nxvim-line-component-options|
-7. Themes                                                  |nxvim-line-themes|
-8. Highlights                                          |nxvim-line-highlights|
-9. Extensions                                          |nxvim-line-extensions|
-10. Tabline                                               |nxvim-line-tabline|
-11. API                                                       |nxvim-line-api|
-12. Custom components                           |nxvim-line-custom-components|
-13. Not supported                                   |nxvim-line-not-supported|
+1. How it works                                      |bemtvi-line-how-it-works|
+2. Setup                                                    |bemtvi-line-setup|
+3. Options                                                |bemtvi-line-options|
+4. Sections                                              |bemtvi-line-sections|
+  - Inactive sections                  |bemtvi-line-sections-inactive-sections|
+5. Components                                          |bemtvi-line-components|
+  - File-only components          |bemtvi-line-components-file-only-components|
+  - lsp notes                                |bemtvi-line-components-lsp-notes|
+  - searchcount notes                |bemtvi-line-components-searchcount-notes|
+6. Component options                            |bemtvi-line-component-options|
+7. Themes                                                  |bemtvi-line-themes|
+8. Highlights                                          |bemtvi-line-highlights|
+9. Extensions                                          |bemtvi-line-extensions|
+10. Tabline                                               |bemtvi-line-tabline|
+11. API                                                       |bemtvi-line-api|
+12. Custom components                           |bemtvi-line-custom-components|
+13. Not supported                                   |bemtvi-line-not-supported|
 
-A fully-featured, lualine-style statusline for nxvim. It gives you lualine's
+A fully-featured, lualine-style statusline for bemtvi. It gives you lualine's
 config shape — `sections = { lualine_a = {...}, ... }`, themeable,
 mode-coloured, powerline-separated, with a rich component library — but it is
 a COMPILER, not a renderer: the editor already owns statusline rendering via
-the native `nx.statusline` segment registry, so nxvim-line LOWERS a
+the native `btv.statusline` segment registry, so bemtvi-line LOWERS a
 lualine-shaped config onto that primitive and lets the hot path stay in Rust.
 
 >lua
-    require("nxvim-line").setup({
+    require("bemtvi-line").setup({
       options = { theme = "auto" },
       sections = {
         lualine_a = { "mode" },
@@ -42,17 +42,17 @@ lualine-shaped config onto that primitive and lets the hot path stay in Rust.
     })
 <
 
-                                                *nxvim-line* *nxvim-line-intro*
+                                                *bemtvi-line* *bemtvi-line-intro*
 
 
 ==============================================================================
-1. How it works                                      *nxvim-line-how-it-works*
+1. How it works                                      *bemtvi-line-how-it-works*
 
-nxvim-line is a compiler, not a renderer. The editor already owns statusline
-rendering through the native `nx.statusline` segment registry: built-in
+bemtvi-line is a compiler, not a renderer. The editor already owns statusline
+rendering through the native `btv.statusline` segment registry: built-in
 segments (`mode`, `location`, `diagnostics`, …) resolve in Rust every frame,
 and custom Lua segments run their `render` only when invalidated by a declared
-event — never per frame (ADR 0002). nxvim-line takes the lualine-shaped
+event — never per frame (ADR 0002). bemtvi-line takes the lualine-shaped
 config and lowers it onto that primitive: it registers one custom segment per
 section, defines the highlight groups for the theme, and wires each
 component's invalidation events. The hot path stays in Rust; your config
@@ -60,19 +60,19 @@ stays familiar.
 
 
 ==============================================================================
-2. Setup                                                    *nxvim-line-setup*
+2. Setup                                                    *bemtvi-line-setup*
 
-`require("nxvim-line").setup(config)` merges `config` over the defaults,
+`require("bemtvi-line").setup(config)` merges `config` over the defaults,
 validates it (an unknown component / theme / extension is a HARD ERROR naming
 the offender — never a silent blank), and activates the statusline. It is
 idempotent: calling it again tears down the prior layout and rebuilds.
 
-Install via `:Plugins` (the nxvim plugin manager). A minimal config is just
-`require("nxvim-line").setup({})` — every field below has a default.
+Install via `:Plugins` (the bemtvi plugin manager). A minimal config is just
+`require("bemtvi-line").setup({})` — every field below has a default.
 
 
 ==============================================================================
-3. Options                                                *nxvim-line-options*
+3. Options                                                *bemtvi-line-options*
 
 `config.options` — global behaviour. Defaults shown.
 
@@ -111,11 +111,11 @@ timer — it is event-driven via `ModeChanged` — so the timer can stay
 coarse.
 
 `disabled_filetypes.statusline` is a list of filetypes whose window shows a
-blank bar (e.g. `{ "nxvim-tree" }`).
+blank bar (e.g. `{ "bemtvi-tree" }`).
 
 
 ==============================================================================
-4. Sections                                              *nxvim-line-sections*
+4. Sections                                              *bemtvi-line-sections*
 
 `config.sections` is the active-window layout; `config.inactive_sections` the
 non-focused-window layout. Both take the six lualine section keys —
@@ -125,7 +125,7 @@ section's default wholesale (lualine semantics); unspecified sections keep
 their defaults.
 
 The default `sections` are the snippet at the top of this page: lualine's own
-defaults, plus `lsp` leading `lualine_x`. nxvim ships LSP in the box, so the
+defaults, plus `lsp` leading `lualine_x`. bemtvi ships LSP in the box, so the
 attached server is on the bar with no config at all; the component renders
 nothing when no client is attached, so a buffer with no server looks exactly as
 it would without it.
@@ -149,7 +149,7 @@ options):
 <
 
 
-INACTIVE SECTIONS                      *nxvim-line-sections-inactive-sections*
+INACTIVE SECTIONS                      *bemtvi-line-sections-inactive-sections*
 
 `inactive_sections` renders for windows that do not hold focus, flat (no
 powerline arrows) in the dim `lualine_<section>_inactive` groups. Its default
@@ -157,9 +157,9 @@ is `{ lualine_c = { "filename" }, lualine_x = { "location" } }`.
 
 
 ==============================================================================
-5. Components                                          *nxvim-line-components*
+5. Components                                          *bemtvi-line-components*
 
-The built-in component library. Each reads editor state through `nx.*` and
+The built-in component library. Each reads editor state through `btv.*` and
 re-renders only on its own events (never per frame).
 
 >
@@ -201,7 +201,7 @@ re-renders only on its own events (never per frame).
                  `opts.maxcount` (default 99; beyond it the total shows
                  `99+`); nothing when there is no pattern / no match. See
                  the notes below.
-    daemon       Remote-daemon link status (`nx.daemon.status()`) —
+    daemon       Remote-daemon link status (`btv.daemon.status()`) —
                  connected, reconnecting, or disconnected, each in its own
                  colour with a glyph. Hidden on a local (non-daemon)
                  session. Opt `label` = false (icon only) | a string
@@ -211,10 +211,10 @@ re-renders only on its own events (never per frame).
 <
 
 
-FILE-ONLY COMPONENTS              *nxvim-line-components-file-only-components*
+FILE-ONLY COMPONENTS              *bemtvi-line-components-file-only-components*
 
 A statusline is often rendered for something that is not a file: a file tree, a
-diff pane, the quickfix window, a terminal, any `nx.view` a plugin mounts. The
+diff pane, the quickfix window, a terminal, any `btv.view` a plugin mounts. The
 components marked **file-only** above describe the _file_ behind a buffer, and
 have nothing true to say about those surfaces — a tree has no encoding and no
 line endings, and its "filetype" is the widget's own tag rather than a
@@ -222,13 +222,13 @@ language. They render nothing there. The buffer's NAME still shows: that is
 what labels the pane.
 
 The rule reads the editor's canonical signal, `'buftype'` — `""` for a real
-document, and the kind of the surface otherwise (`nofile` for an `nx.view`,
+document, and the kind of the surface otherwise (`nofile` for an `btv.view`,
 `quickfix`, `terminal`). It is a plain buffer option, so nothing here is
-nxvim-line-specific; any statusline can key off the same thing:
+bemtvi-line-specific; any statusline can key off the same thing:
 
 >lua
-    if nx.bo[buf].buftype == "" then … end          -- a real file buffer
-    require("nxvim-line.components").is_file_buffer(buf)  -- the same test, plus a validity check
+    if btv.bo[buf].buftype == "" then … end          -- a real file buffer
+    require("bemtvi-line.components").is_file_buffer(buf)  -- the same test, plus a validity check
 <
 
 Override it per component, either way:
@@ -252,7 +252,7 @@ gated on a missing editor primitive is registered as deferred, so naming it in
 `sections` errors loud with the reason rather than rendering nothing.
 
 
-LSP NOTES                                    *nxvim-line-components-lsp-notes*
+LSP NOTES                                    *bemtvi-line-components-lsp-notes*
 
 The `lsp` component answers two different questions. The client **names**
 answer "is a server attached" — space-separated, since two servers on one
@@ -262,7 +262,7 @@ the question that matters in the first seconds in a large project, and the one
 a bare name list silently gets wrong, since an indexing server looks identical
 to a finished one.
 
-Progress comes from `nx.lsp.progress({ bufnr })`, the editor's mirror of the
+Progress comes from `btv.lsp.progress({ bufnr })`, the editor's mirror of the
 servers' `$/progress` reports, and every update fires the `LspProgress`
 autocmd, which invalidates the section. Two bounds keep a server from taking
 over the bar:
@@ -288,23 +288,23 @@ all.
 <
 
 
-SEARCHCOUNT NOTES                    *nxvim-line-components-searchcount-notes*
+SEARCHCOUNT NOTES                    *bemtvi-line-components-searchcount-notes*
 
 `searchcount` reads the pattern from the `/` register and enumerates its
-matches with `nx.buf.search`, using the buffer's EFFECTIVE `'regexsyntax'`
+matches with `btv.buf.search`, using the buffer's EFFECTIVE `'regexsyntax'`
 dialect — which defaults to `pcre`, not vim. So the count follows whatever
 the editor's own `/` search just matched: `fo+` counts as a PCRE quantifier
 under the default, and as a literal `fo+` only under `:set regexsyntax=vim`.
 
 Enumerating costs one pass over the buffer's text, so the result is cached
-per buffer against `nx.buf.changedtick` plus the pattern and `maxcount`. The
+per buffer against `btv.buf.changedtick` plus the pattern and `maxcount`. The
 component rides `CursorMoved`, and a cursor move at an unchanged buffer and
 pattern reuses the cached list (the cursor's index is a bisection over it)
 — moving through a large buffer never re-scans it.
 
 
 ==============================================================================
-6. Component options                            *nxvim-line-component-options*
+6. Component options                            *bemtvi-line-component-options*
 
 Any component table accepts these (the lualine shape):
 
@@ -338,7 +338,7 @@ component-specific options (e.g. `filename.path`, `diagnostics.symbols`,
 
 
 ==============================================================================
-7. Themes                                                  *nxvim-line-themes*
+7. Themes                                                  *bemtvi-line-themes*
 
 `options.theme` is one of:
 
@@ -348,7 +348,7 @@ component-specific options (e.g. `filename.path`, `diagnostics.symbols`,
               lualine theme module it is used (real lualine's behaviour);
               otherwise a powerline palette is synthesized from the bar's
               StatusLine / StatusLineNC groups plus the semantic accents
-              nx.hl.palette() reads off the theme.
+              btv.hl.palette() reads off the theme.
     a NAME    Resolved bundled ("default") →
               require("lualine.themes.<name>") → error. So
               theme = "catppuccin" loads catppuccin's own lualine theme
@@ -381,7 +381,7 @@ highlight group to link to. Add one with `register_theme` (see API).
 
 
 ==============================================================================
-8. Highlights                                          *nxvim-line-highlights*
+8. Highlights                                          *bemtvi-line-highlights*
 
 The theme defines a group per (section, mode) under LUALINE's own naming —
 `lualine_a_normal`, `lualine_a_insert`, `lualine_c_inactive`, … — so a
@@ -394,7 +394,7 @@ other's).
 
 
 ==============================================================================
-9. Extensions                                          *nxvim-line-extensions*
+9. Extensions                                          *bemtvi-line-extensions*
 
 `config.extensions` is a list of per-filetype layout overrides. When the
 rendered window's buffer has one of an extension's filetypes, the
@@ -403,7 +403,7 @@ section it omits renders empty). An entry is a bundled NAME or an inline table:
 
 >lua
     extensions = {
-      "nxvim-tree",      -- bundled (alias: "nvim-tree") — a tree title
+      "bemtvi-tree",      -- bundled (alias: "nvim-tree") — a tree title
       "quickfix",        -- bundled — a "Quickfix" label + the location
       {                  -- a custom extension
         filetypes = { "myft" },
@@ -417,14 +417,14 @@ Add a bundled extension with `register_extension` (see API).
 
 
 ==============================================================================
-10. Tabline                                               *nxvim-line-tabline*
+10. Tabline                                               *bemtvi-line-tabline*
 
 `config.tabline` takes the same section keys as `sections`. If non-empty,
-nxvim-line lowers it onto the core `'tabline'` %-format engine (a segment
+bemtvi-line lowers it onto the core `'tabline'` %-format engine (a segment
 layout never applies to the tabline) — setting `'tabline'` to a live `%!`
 dispatcher and `'showtabline'` to 2. An empty `tabline` clears only what
-nxvim-line set: `'tabline'` goes back to empty and `'showtabline'` back to the
-value it had before nxvim-line raised it, so no empty bar is left occupying a
+bemtvi-line set: `'tabline'` goes back to empty and `'showtabline'` back to the
+value it had before bemtvi-line raised it, so no empty bar is left occupying a
 screen row.
 
 >lua
@@ -433,10 +433,10 @@ screen row.
 
 
 ==============================================================================
-11. API                                                       *nxvim-line-api*
+11. API                                                       *bemtvi-line-api*
 
 >lua
-    local line = require("nxvim-line")
+    local line = require("bemtvi-line")
 <
 
 - `line.setup(config)` — build / rebuild the statusline
@@ -461,7 +461,7 @@ Call the `register_*` functions BEFORE `setup()` so the config sees them.
 
 
 ==============================================================================
-12. Custom components                           *nxvim-line-custom-components*
+12. Custom components                           *bemtvi-line-custom-components*
 
 A component is `{ events = {...}, provide = function(ctx, opts) -> result }`.
 `provide` is PURE — it reads editor state and returns cells; it runs only
@@ -470,7 +470,7 @@ per frame. `result` is nil (nothing), a single cell `{ text = , hl? = }`, or a
 LIST of cells.
 
 >lua
-    local line = require("nxvim-line")
+    local line = require("bemtvi-line")
     
     line.register_component("clock", {
       events = {},                       -- driven by options.refresh instead
@@ -519,9 +519,9 @@ arrow's background over a collapsed section.
 
 
 ==============================================================================
-13. Not supported                                   *nxvim-line-not-supported*
+13. Not supported                                   *bemtvi-line-not-supported*
 
-- Winbar — needs a `'winbar'` option in nxvim-core (a per-window
+- Winbar — needs a `'winbar'` option in bemtvi-core (a per-window
     bar is a separate, large core feature spanning every client
     renderer).
 

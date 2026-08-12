@@ -1,23 +1,23 @@
--- nxvim-line.components: the component registry + the component library.
+-- bemtvi-line.components: the component registry + the component library.
 --
 -- A component is `{ events = {...}, provide = function(ctx, opts) -> result }` where
 -- `result` is nil (nothing), a single cell `{ text = "...", hl? = "Group" }`, or a
 -- LIST of cells `{ {text, hl}, ... }` (e.g. diagnostics / diff, one coloured cell per
--- part). `provide` is PURE — it reads editor state through `nx.*` and returns cells; it
+-- part). `provide` is PURE — it reads editor state through `btv.*` and returns cells; it
 -- runs only when the section is invalidated, never per frame. `events` are the autocmd
 -- events that invalidate a section using the component; `compile` unions a section's
--- components' events and hands them to `nx.statusline.segment`. `ctx = { buf, win,
--- focused }` comes from nx.statusline, so a component reads the *rendered window's*
+-- components' events and hands them to `btv.statusline.segment`. `ctx = { buf, win,
+-- focused }` comes from btv.statusline, so a component reads the *rendered window's*
 -- buffer/cursor.
 --
 -- Components emit their own default icons (Phase 3) gated on `icons.enabled()`; the
 -- per-severity diagnostic and per-kind diff colours use the editor's existing
 -- Diagnostic*/Diff* groups. Per-mode theme colour arrives in Phase 4.
 
-local git = require("nxvim-line.git")
-local highlights = require("nxvim-line.highlights")
-local icons = require("nxvim-line.icons")
-local lspprogress = require("nxvim-line.lspprogress")
+local git = require("bemtvi-line.git")
+local highlights = require("bemtvi-line.highlights")
+local icons = require("bemtvi-line.icons")
+local lspprogress = require("bemtvi-line.lspprogress")
 
 local M = {}
 
@@ -27,7 +27,7 @@ M._registry = {}
 -- that doesn't exist. Naming one in `sections` errors with the reason (config.lua),
 -- rather than silently rendering nothing (CLAUDE.md: no silent stubs). Empty today: the
 -- formerly-deferred `fileformat` (now a core `'fileformat'` option) and `searchcount`
--- (computed in-plugin via `nx.buf.search`) are both implemented. The mechanism stays for
+-- (computed in-plugin via `btv.buf.search`) are both implemented. The mechanism stays for
 -- any future component gated on a core addition.
 M._deferred = {}
 
@@ -35,7 +35,7 @@ function M.deferred_reason(name)
   return M._deferred[name]
 end
 
--- register(name, spec): add a component. Public via `require("nxvim-line").register_component`.
+-- register(name, spec): add a component. Public via `require("bemtvi-line").register_component`.
 --
 -- `spec.always = true` declares that `provide` ALWAYS yields a visible cell (`mode`,
 -- `location`, `filename`, … never collapse to nothing). It is a pure optimization for
@@ -54,13 +54,13 @@ end
 -- `{ "mything", file_only = true }` opts a custom component out of plugin surfaces.
 function M.register(name, spec)
   if type(name) ~= "string" then
-    error("nxvim-line.register_component: name must be a string")
+    error("bemtvi-line.register_component: name must be a string")
   end
   if type(spec) ~= "table" or type(spec.provide) ~= "function" then
-    error("nxvim-line.register_component: spec needs a 'provide' function")
+    error("bemtvi-line.register_component: spec needs a 'provide' function")
   end
   if spec.events ~= nil and type(spec.events) ~= "table" then
-    error("nxvim-line.register_component: 'events' must be a list of event names")
+    error("bemtvi-line.register_component: 'events' must be a list of event names")
   end
   M._registry[name] = {
     events = spec.events or {},
@@ -74,19 +74,19 @@ end
 --
 -- The canonical editor signal, not a guess: `'buftype'` is `""` only for a real document
 -- (including a not-yet-saved `[No Name]`), and names the surface otherwise — `nofile` for
--- an `nx.view` (a file tree, a diff pane, a dock panel), `quickfix`, `terminal`. Reading
+-- an `btv.view` (a file tree, a diff pane, a dock panel), `quickfix`, `terminal`. Reading
 -- it here means the rule follows whatever the core models, instead of pattern-matching a
 -- buffer's NAME for `[…]`-style placeholders — a heuristic that breaks on a real file
 -- literally called `[foo]` and has to be re-invented by every component.
 --
 -- Any statusline, and any custom component, can key off the same thing: it is a plain
--- buffer option (`nx.bo[buf].buftype`, neovim's `vim.bo[buf].buftype`), nothing
--- nxvim-line-specific.
+-- buffer option (`btv.bo[buf].buftype`, neovim's `vim.bo[buf].buftype`), nothing
+-- bemtvi-line-specific.
 --
 -- Validity is checked first: a debounced render can land a tick after the buffer went
 -- away (`:bd`, a closed panel), and reading an option off a dead handle must not throw.
 function M.is_file_buffer(buf)
-  return nx.buf.is_valid(buf) and nx.bo[buf].buftype == ""
+  return btv.buf.is_valid(buf) and btv.bo[buf].buftype == ""
 end
 
 function M.is_known(name)
@@ -114,7 +114,7 @@ M.register("label", {
 
 -- ----- mode ------------------------------------------------------------------
 
--- Short mode code (`nx.mode().mode`) -> a lualine-style label. Keep this table in
+-- Short mode code (`btv.mode().mode`) -> a lualine-style label. Keep this table in
 -- step with `themes.MODE_OF` (which maps the same codes to a palette): a code missing
 -- from either one degrades, and they must agree on which codes exist.
 local MODE_LABEL = {
@@ -126,14 +126,14 @@ local MODE_LABEL = {
   R = "REPLACE",
   c = "COMMAND",
   t = "TERMINAL",
-  m = "MULTICURSOR", -- nxvim's multi-cursor placement mode (mode() reports "m")
+  m = "MULTICURSOR", -- bemtvi's multi-cursor placement mode (mode() reports "m")
   -- The `i_CTRL-O` one-shot: Normal for exactly one command, then Insert / Replace
   -- resumes, which `mode()` reports as `niI` / `niR`. lualine labels both NORMAL (it
   -- *is* Normal mode right now). Unmapped these fell through to `code:upper()` and
   -- the bar read "NII" / "NIR".
   niI = "NORMAL",
   niR = "NORMAL",
-  -- Helix's selection-first modes (opt-in via `:helix` / nx.helix.enable). mode()
+  -- Helix's selection-first modes (opt-in via `:helix` / btv.helix.enable). mode()
   -- reports "hn"/"hs"; mirror the core's Mode::label() so the bar reads HELIX /
   -- HELIX-SEL rather than the raw code.
   hn = "HELIX",
@@ -156,7 +156,7 @@ M.register("mode", {
   events = { "ModeChanged" },
   always = true,
   provide = function()
-    local code = nx.mode().mode
+    local code = btv.mode().mode
     return { text = MODE_LABEL[code] or fallback_label(code) }
   end,
 })
@@ -177,7 +177,7 @@ M.register("filename", {
   always = true, -- an unnamed buffer still shows "[No Name]"
   provide = function(ctx, opts)
     local buf = ctx.buf
-    local name = nx.buf.name(buf)
+    local name = btv.buf.name(buf)
     -- `or` is the right selector here even with a 0 default value: 0 is truthy in
     -- Lua, so an explicit `path = 0` survives and only nil falls through.
     local path_mode = (opts and opts.path) or 1
@@ -196,9 +196,9 @@ M.register("filename", {
     else
       shown = name:match("[^/]*$") or name
     end
-    if nx.bo[buf].modified then
+    if btv.bo[buf].modified then
       shown = shown .. " [+]"
-    elseif nx.bo[buf].modifiable == false then
+    elseif btv.bo[buf].modifiable == false then
       shown = shown .. " [-]"
     end
     return { text = shown }
@@ -212,15 +212,15 @@ M.register("filename", {
 -- section highlight. With icons disabled (`icons_enabled = false`) the name shows plain.
 M.register("filetype", {
   events = { "FileType", "BufEnter" },
-  -- A plugin surface's "filetype" is the widget's own tag (`nxtree`, `qf`), not a
+  -- A plugin surface's "filetype" is the widget's own tag (`btvtree`, `qf`), not a
   -- language worth showing; see `is_file_buffer`.
   file_only = true,
   provide = function(ctx)
-    local ft = nx.bo[ctx.buf].filetype
+    local ft = btv.bo[ctx.buf].filetype
     if not ft or ft == "" then
       return nil
     end
-    local glyph = icons.for_name(nx.buf.name(ctx.buf))
+    local glyph = icons.for_name(btv.buf.name(ctx.buf))
     if glyph then
       return { text = glyph .. " " .. ft }
     end
@@ -233,7 +233,7 @@ M.register("encoding", {
   file_only = true, -- a plugin surface has no file, so no encoding
 
   provide = function(ctx)
-    local enc = nx.bo[ctx.buf].fileencoding
+    local enc = btv.bo[ctx.buf].fileencoding
     if not enc or enc == "" then
       return nil
     end
@@ -241,14 +241,14 @@ M.register("encoding", {
   end,
 })
 
--- The line-ending style (`nx.bo.fileformat` → unix/dos/mac). `opts.symbols` maps each to a
+-- The line-ending style (`btv.bo.fileformat` → unix/dos/mac). `opts.symbols` maps each to a
 -- glyph/label; otherwise the bare name shows.
 M.register("fileformat", {
   events = { "BufEnter", "BufReadPost", "BufWritePost" },
   file_only = true, -- …and no line endings
 
   provide = function(ctx, opts)
-    local ff = nx.bo[ctx.buf].fileformat
+    local ff = btv.bo[ctx.buf].fileformat
     if not ff or ff == "" then
       return nil
     end
@@ -263,7 +263,7 @@ M.register("location", {
   events = { "CursorMoved", "CursorMovedI" },
   always = true,
   provide = function(ctx)
-    local c = nx.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
+    local c = btv.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
     return { text = string.format("%d:%d", c[1], (c[2] or 0) + 1) }
   end,
 })
@@ -272,8 +272,8 @@ M.register("progress", {
   events = { "CursorMoved", "CursorMovedI" },
   always = true,
   provide = function(ctx)
-    local row = nx.cursor.get(ctx.win)[1]
-    local total = nx.buf.line_count(ctx.buf)
+    local row = btv.cursor.get(ctx.win)[1]
+    local total = btv.buf.line_count(ctx.buf)
     if total <= 1 or row <= 1 then
       return { text = "Top" }
     end
@@ -308,7 +308,7 @@ M.register("diagnostics", {
     local sym = (opts and opts.symbols) or (icons.enabled() and DIAG_GLYPHS or DIAG_LETTERS)
     local syms = { sym.error, sym.warn, sym.info, sym.hint }
     local counts = { 0, 0, 0, 0 } -- ERROR, WARN, INFO, HINT (severity 1..4)
-    for _, d in ipairs(nx.diagnostic.get(ctx.buf)) do
+    for _, d in ipairs(btv.diagnostic.get(ctx.buf)) do
       local s = d.severity
       if type(s) == "number" and counts[s] ~= nil then
         counts[s] = counts[s] + 1
@@ -371,7 +371,7 @@ end
 -- project, and the one a bare name list silently gets wrong (an indexing server looks
 -- identical to a finished one).
 --
--- Progress is filtered to THIS buffer's clients (`nx.lsp.progress({ bufnr })`): a
+-- Progress is filtered to THIS buffer's clients (`btv.lsp.progress({ bufnr })`): a
 -- server busy in another project's window is not this buffer's status. Only the
 -- first task renders, with `(+N)` for the rest — a server may run several at once
 -- (rust-analyzer routinely does) and rendering them all would be unbounded.
@@ -382,7 +382,7 @@ M.register("lsp", {
   events = { "LspAttach", "LspDetach", "LspProgress", "BufEnter" },
   provide = function(ctx, opts)
     local names = {}
-    for _, c in ipairs(nx.lsp.clients({ bufnr = ctx.buf }) or {}) do
+    for _, c in ipairs(btv.lsp.clients({ bufnr = ctx.buf }) or {}) do
       if c.name then
         names[#names + 1] = c.name
       end
@@ -394,7 +394,7 @@ M.register("lsp", {
     -- (`pyright,ruff`), while spacing lets each server stand as its own word.
     local text = table.concat(names, " ")
     if not (opts and opts.progress == false) then
-      local tasks = nx.lsp.progress({ bufnr = ctx.buf })
+      local tasks = btv.lsp.progress({ bufnr = ctx.buf })
       if #tasks > 0 then
         text = text .. " " .. progress_text(tasks[1], opts)
         if #tasks > 1 then
@@ -410,15 +410,15 @@ M.register("lsp", {
 
 -- The match index / total for the last search pattern (vim's `searchcount()`), e.g.
 -- `[3/12]`. Pure-Lua: the pattern is the read-only `/` register; matches are enumerated
--- with positions via the native `nx.buf.search`, so the cursor's index is exact. Bounded
+-- with positions via the native `btv.buf.search`, so the cursor's index is exact. Bounded
 -- by `opts.maxcount` (default 99 — vim's default) so a buffer with very many matches
 -- never makes a render unbounded; beyond it the total shows as `99+`. Nothing is shown
 -- when there is no pattern or no match in the buffer. Rides `CursorMoved` (a search,
 -- `n`, `N` all move the cursor onto a match).
 --
--- The enumeration is CACHED per buffer against `nx.buf.changedtick` — the canonical
+-- The enumeration is CACHED per buffer against `btv.buf.changedtick` — the canonical
 -- "did the text change" signal — plus the pattern and the bound. That matters because
--- enumerating costs a full buffer text scan (each `nx.buf.search` runs from the previous
+-- enumerating costs a full buffer text scan (each `btv.buf.search` runs from the previous
 -- match to the next one, so the walk sweeps the buffer once, compiling the pattern per
 -- call), and this component rides `CursorMoved`: recomputing per keystroke would make
 -- every `j` in a large buffer O(buffer), exactly the freeze CLAUDE.md's per-event rule
@@ -432,7 +432,7 @@ M._searchcount_stats = { scans = 0 }
 -- The enumerated match starts for `buf`, reusing the cached list when the buffer text,
 -- the pattern, and the bound are all unchanged.
 local function search_starts(buf, pattern, maxcount)
-  local tick = nx.buf.changedtick(buf)
+  local tick = btv.buf.changedtick(buf)
   local hit = M._searchcount_cache[buf]
   if hit and hit.tick == tick and hit.pattern == pattern and hit.maxcount == maxcount then
     return hit.starts
@@ -442,14 +442,14 @@ local function search_starts(buf, pattern, maxcount)
   -- `'regexsyntax'` dialect — which defaults to `pcre`, not vim. Hardcoding the vim
   -- engine here silently mismatched every pattern whose spelling differs (`fo+` matched
   -- nothing), so the bar showed no count for a search the editor had just performed.
-  local engine = nx.bo[buf].regexsyntax
+  local engine = btv.bo[buf].regexsyntax
   if engine ~= "vim" and engine ~= "pcre" then
     engine = "pcre"
   end
   local starts = {}
   local from = { line = 1, col = 0 }
   while #starts < maxcount do
-    local m = nx.buf.search(buf, pattern, { engine = engine, from = from })
+    local m = btv.buf.search(buf, pattern, { engine = engine, from = from })
     if not m then
       break
     end
@@ -463,7 +463,7 @@ local function search_starts(buf, pattern, maxcount)
   end
   -- One entry per buffer, so pruning the dead ones on each miss keeps this tiny.
   for b in pairs(M._searchcount_cache) do
-    if b ~= buf and not nx.buf.is_valid(b) then
+    if b ~= buf and not btv.buf.is_valid(b) then
       M._searchcount_cache[b] = nil
     end
   end
@@ -503,14 +503,14 @@ M.register("searchcount", {
     if total == 0 then
       return nil
     end
-    local cur = nx.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
+    local cur = btv.cursor.get(ctx.win) -- { row (1-based), col (0-based) }
     local current = index_at(starts, cur[1], cur[2] or 0)
     local shown = (total >= maxcount) and (maxcount .. "+") or tostring(total)
     return { text = string.format("[%d/%s]", current, shown) }
   end,
 })
 
--- ----- branch / diff (git, async via nxvim-line.git) -------------------------
+-- ----- branch / diff (git, async via bemtvi-line.git) -------------------------
 
 -- These depend on the window's buffer, so they re-render on the events that signal a
 -- buffer change: `BufEnter` (a switch) and `TextChanged` (a fresh `:edit` reuses the
@@ -581,7 +581,7 @@ M.register("diff", {
 
 -- ----- daemon ----------------------------------------------------------------
 
--- Remote-daemon connection status (`nx.daemon.status()`), coloured per phase so a glance
+-- Remote-daemon connection status (`btv.daemon.status()`), coloured per phase so a glance
 -- tells you the link's health: connected green, reconnecting yellow, disconnected red —
 -- the editor's existing Diagnostic{Ok,Warn,Error} groups (so a colorscheme override of
 -- those just applies). A local (non-daemon) session reports nil, and the component renders
@@ -597,7 +597,7 @@ local DAEMON = {
 M.register("daemon", {
   events = { "User DaemonStatusChanged" },
   provide = function(_ctx, opts)
-    local status = nx.daemon and nx.daemon.status()
+    local status = btv.daemon and btv.daemon.status()
     if not status then
       return nil -- a local (non-daemon) session: nothing to show
     end

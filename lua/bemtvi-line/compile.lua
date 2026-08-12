@@ -1,15 +1,15 @@
--- nxvim-line.compile: lower a validated config onto the native nx.statusline segment
--- registry. One custom segment per non-empty lualine section (`NxLineA`..`NxLineZ`);
+-- bemtvi-line.compile: lower a validated config onto the native btv.statusline segment
+-- registry. One custom segment per non-empty lualine section (`BtvLineA`..`BtvLineZ`);
 -- its `render(ctx)` walks the section's components and concatenates their cells.
 --
--- nx.statusline owns layout activation AND the event->invalidate wiring: we hand each
--- segment the *union* of its components' declared `events`, and `nx.statusline.setup`
+-- btv.statusline owns layout activation AND the event->invalidate wiring: we hand each
+-- segment the *union* of its components' declared `events`, and `btv.statusline.setup`
 -- registers one invalidating autocmd per (segment, event) and replaces them on every
 -- call. So `build()` is idempotent with no bookkeeping here — re-running it overwrites
 -- the segments by name and re-activates the layout; a section dropped from the new
 -- config is simply no longer referenced.
 --
--- (`NxLine*` here are nx.statusline SEGMENT registry names — a private namespace,
+-- (`BtvLine*` here are btv.statusline SEGMENT registry names — a private namespace,
 -- distinct from the `lualine_<section>_<mode>` HIGHLIGHT groups Phase 4 defines.)
 --
 -- Phase 4: each section paints in its theme group for the CURRENT mode — a section's
@@ -17,14 +17,14 @@
 -- sections take a colour transition group, and every section also re-renders on
 -- `ModeChanged`. A component with its own `color`/`hl` opts out of the section palette.
 
-local config = require("nxvim-line.config")
-local components = require("nxvim-line.components")
-local git = require("nxvim-line.git")
-local icons = require("nxvim-line.icons")
-local lspprogress = require("nxvim-line.lspprogress")
-local highlights = require("nxvim-line.highlights")
-local themes = require("nxvim-line.themes")
-local extensions = require("nxvim-line.extensions")
+local config = require("bemtvi-line.config")
+local components = require("bemtvi-line.components")
+local git = require("bemtvi-line.git")
+local icons = require("bemtvi-line.icons")
+local lspprogress = require("bemtvi-line.lspprogress")
+local highlights = require("bemtvi-line.highlights")
+local themes = require("bemtvi-line.themes")
+local extensions = require("bemtvi-line.extensions")
 
 local M = {}
 
@@ -35,12 +35,12 @@ local DEFAULT_PADDING = 1
 local GIT_COMPONENTS = { branch = true, diff = true }
 
 local SECTION_SEGMENT = {
-  lualine_a = "NxLineA",
-  lualine_b = "NxLineB",
-  lualine_c = "NxLineC",
-  lualine_x = "NxLineX",
-  lualine_y = "NxLineY",
-  lualine_z = "NxLineZ",
+  lualine_a = "BtvLineA",
+  lualine_b = "BtvLineB",
+  lualine_c = "BtvLineC",
+  lualine_x = "BtvLineX",
+  lualine_y = "BtvLineY",
+  lualine_z = "BtvLineZ",
 }
 -- The lualine section LETTER (a..z) for each section key — the theme/transition group key.
 local SECTION_LETTER = {
@@ -68,14 +68,14 @@ M._active = {}
 M._last = {}
 M._last_win = {}
 
--- Drop `_last_win` rows for windows that are gone. `nx.statusline` re-renders a segment
+-- Drop `_last_win` rows for windows that are gone. `btv.statusline` re-renders a segment
 -- for every LIVE window, so nothing else ever removes a closed window's row: without this
 -- a long session of `:split` / `:close` accumulates one cell-list per window id it ever
 -- painted, forever (build() was the only reset). Runs per render and is O(tracked
 -- windows), which this keeps equal to the live window count.
 local function prune_last_win()
   for win in pairs(M._last_win) do
-    if not nx.win.is_valid(win) then
+    if not btv.win.is_valid(win) then
       M._last_win[win] = nil
     end
   end
@@ -273,7 +273,7 @@ local function component_cells(comp, ctx, section_hl)
   -- lualine `on_click`: thread the native click handler (a `v:lua.<fn>` string resolved
   -- through compile._click) onto every cell. The id was assigned at build time.
   if comp._click_id ~= nil then
-    local click = "v:lua.require'nxvim-line.compile'._click(" .. comp._click_id .. ")"
+    local click = "v:lua.require'bemtvi-line.compile'._click(" .. comp._click_id .. ")"
     for _, c in ipairs(run) do
       c.on_click = click
     end
@@ -287,7 +287,7 @@ end
 -- (flat, no arrows); otherwise the focus-appropriate base layout (active arrows, inactive
 -- flat). `opts.extensions[i] = { fts, comps, inactive_comps }` per resolved extension.
 local function pick_layout(ctx, opts, focused)
-  local ft = nx.bo[ctx.buf].filetype or ""
+  local ft = btv.bo[ctx.buf].filetype or ""
   if opts.disabled[ft] then
     return nil
   end
@@ -366,7 +366,7 @@ local function render_section(ctx, opts)
   if not comps or #comps == 0 then
     return {}
   end
-  local mode = focused and themes.mode_of(nx.mode().mode) or "inactive"
+  local mode = focused and themes.mode_of(btv.mode().mode) or "inactive"
   local section_hl = highlights.section_group(opts.section, mode)
 
   local pieces = {}
@@ -583,14 +583,14 @@ local function make_section(cfg, sec, side, sep_glyph, component_sep, ctx)
   }
 end
 
--- Register a built section as an nx.statusline segment. `events_both` is the component
+-- Register a built section as an btv.statusline segment. `events_both` is the component
 -- union whose events invalidate it — this section's own components PLUS its neighbour
 -- chain's (so the mode block re-renders when the git branch appears/disappears, moving
 -- its arrow's target). `is_git` folds in a neighbour's git dependence so a git data update
 -- invalidates this section too, not only the section the branch text lives in.
 local function register_section(b, events_both, is_git, is_spinner, out, git_segs, spin_segs)
   local segname, opts = b.segname, b.opts
-  nx.statusline.segment({
+  btv.statusline.segment({
     name = segname,
     events = union_events(events_both),
     render = function(rctx)
@@ -681,7 +681,7 @@ end
 -- ----- click handlers --------------------------------------------------------
 
 -- The registered per-component `on_click` handlers, keyed by an id assigned at build time;
--- a cell references its handler via a `v:lua.require'nxvim-line.compile'._click(id)` string.
+-- a cell references its handler via a `v:lua.require'bemtvi-line.compile'._click(id)` string.
 M._clicks = {}
 
 -- _click(id): resolve a component's click handler to a function the native click bridge
@@ -729,7 +729,7 @@ end
 
 -- start_refresh(refresh): (re)arm the periodic full-statusline refresh from
 -- `options.refresh = { statusline = ms }` (lualine's coarse timer, default 1000ms; for a
--- clock-like component with no event). A re-arming one-shot timer (nx.timer is one-shot)
+-- clock-like component with no event). A re-arming one-shot timer (btv.timer is one-shot)
 -- that invalidates every active segment each interval, and stops when a newer build()
 -- bumps the generation. `ms` ≤ 0 / non-number disables it (mode colour is event-driven via
 -- ModeChanged, so the timer can be coarse without making transitions feel laggy).
@@ -745,9 +745,9 @@ local function start_refresh(refresh)
       return -- superseded by a later build()
     end
     M.invalidate_all()
-    nx.timer(tick, ms)
+    btv.timer(tick, ms)
   end
-  nx.timer(tick, ms)
+  btv.timer(tick, ms)
 end
 
 -- ----- tabline ---------------------------------------------------------------
@@ -768,8 +768,8 @@ function M._tabline()
   if not cfg then
     return ""
   end
-  local rctx = { win = nx.win.current(), buf = nx.buf.current(), focused = true }
-  local mode = themes.mode_of(nx.mode().mode)
+  local rctx = { win = btv.win.current(), buf = btv.buf.current(), focused = true }
+  local mode = themes.mode_of(btv.mode().mode)
   local parts = {}
   local function render_keys(keys)
     for _, sec in ipairs(keys) do
@@ -823,7 +823,7 @@ local function build_tabline(config)
     if not M._tabline_set then
       M._showtabline = vim.o.showtabline
     end
-    vim.o.tabline = "%!v:lua.require('nxvim-line.compile')._tabline()"
+    vim.o.tabline = "%!v:lua.require('bemtvi-line.compile')._tabline()"
     vim.o.showtabline = 2
     M._tabline_set = true
   else
@@ -844,7 +844,7 @@ end
 -- build(config): (re)build the live statusline. Idempotent — see the module note.
 function M.build(config)
   -- Styling configuration consumed by render: icon glyphs on/off + the interned-colour
-  -- cache reset (so generated NxLineColor groups don't accumulate across rebuilds).
+  -- cache reset (so generated BtvLineColor groups don't accumulate across rebuilds).
   icons.configure({
     enabled = config.options.icons_enabled,
     provider = config.options.icon_provider,
@@ -883,10 +883,10 @@ function M.build(config)
   build_tabline(config)
 
   vim.o.laststatus = config.options.globalstatus and 3 or 2
-  -- `separator = ""` disables nx.statusline's own connector spaces: each section
+  -- `separator = ""` disables btv.statusline's own connector spaces: each section
   -- already carries its padding + powerline arrows, so the native leading/inter/
   -- trailing spaces would otherwise show as unstyled (white) gaps in the bar.
-  nx.statusline.setup({ left = left, right = right, separator = "" })
+  btv.statusline.setup({ left = left, right = right, separator = "" })
 
   M._active = {}
   for _, n in ipairs(left) do
@@ -901,7 +901,7 @@ function M.build(config)
   if #git_segs > 0 then
     git.activate(function()
       for _, s in ipairs(git_segs) do
-        nx.statusline.invalidate(s)
+        btv.statusline.invalidate(s)
       end
     end)
   else
@@ -915,7 +915,7 @@ function M.build(config)
   if #spin_segs > 0 then
     lspprogress.activate(function()
       for _, s in ipairs(spin_segs) do
-        nx.statusline.invalidate(s)
+        btv.statusline.invalidate(s)
       end
     end)
   else
@@ -928,7 +928,7 @@ end
 -- invalidate_all(): force a re-render of every active section (the public refresh()).
 function M.invalidate_all()
   for _, name in ipairs(M._active) do
-    nx.statusline.invalidate(name)
+    btv.statusline.invalidate(name)
   end
 end
 

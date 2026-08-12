@@ -1,6 +1,6 @@
 -- The spinner clock behind the `lsp` component's progress half.
 --
--- The DATA needs no help: `nx.lsp.progress()` is a mirror the editor keeps current,
+-- The DATA needs no help: `btv.lsp.progress()` is a mirror the editor keeps current,
 -- and every update fires `LspProgress`, which the component already declares as an
 -- invalidation event. What needs a clock is only the ANIMATION — a server that
 -- reports once and then works quietly for ten seconds would otherwise show a frozen
@@ -8,10 +8,10 @@
 --
 -- So the timer exists solely to advance the frame, and it runs ONLY while some task
 -- is in flight: armed on the first `LspProgress`, and it stops itself the moment
--- `nx.lsp.progress()` comes back empty. An always-on animation timer would be a
+-- `btv.lsp.progress()` comes back empty. An always-on animation timer would be a
 -- permanent wakeup for a bar that is idle almost all of the time.
 --
---     nxvim --test-plugin ~/work/nxvim-plugins/nxvim-line
+--     bemtvi --test-plugin ~/work/bemtvi-plugins/bemtvi-line
 
 local M = {}
 
@@ -58,7 +58,7 @@ end
 -- Is any server running a task right now? The tick's stop condition, and the guard
 -- that keeps the clock off entirely for a session whose servers are idle.
 function M.busy()
-  return #nx.lsp.progress() > 0
+  return #btv.lsp.progress() > 0
 end
 
 -- Arm the frame clock if it isn't already running. Self-stopping: the tick re-arms
@@ -82,9 +82,9 @@ local function ensure_tick()
     if M._on_update then
       M._on_update()
     end
-    nx.timer(tick, M.INTERVAL)
+    btv.timer(tick, M.INTERVAL)
   end
-  nx.timer(tick, M.INTERVAL)
+  btv.timer(tick, M.INTERVAL)
 end
 
 -- activate(on_update): drive the spinner for a layout that renders progress.
@@ -94,7 +94,7 @@ end
 function M.activate(on_update)
   M.deactivate()
   M._on_update = on_update
-  M._au[#M._au + 1] = nx.autocmd.create("LspProgress", {
+  M._au[#M._au + 1] = btv.autocmd.create("LspProgress", {
     callback = function()
       -- The event itself already invalidates the segment (the component declares it),
       -- so this only has to make sure the clock is running between events.
@@ -108,12 +108,12 @@ function M.activate(on_update)
 end
 
 -- deactivate(): stop driving. The in-flight tick retires on its generation check
--- rather than being cancelled, since `nx.timer` is one-shot and there is at most one
+-- rather than being cancelled, since `btv.timer` is one-shot and there is at most one
 -- outstanding frame.
 function M.deactivate()
   M._gen = M._gen + 1
   for _, id in ipairs(M._au) do
-    pcall(nx.autocmd.del, id)
+    pcall(btv.autocmd.del, id)
   end
   M._au = {}
   M._on_update = nil
