@@ -1,6 +1,6 @@
 # bemtvi-line
 
-A fully-featured, **lualine-style** statusline for [bemtvi](https://github.com/davidrios/bemtvi).
+A fully-featured, **lualine-style** statusline for [bemtvi](https://github.com/bemtvi/bemtvi).
 
 Configure it the way you'd configure `lualine.nvim` — sections `a`–`z`, a rich component
 library (mode, branch, diff, diagnostics, filename, filetype + icons, fileformat,
@@ -36,7 +36,7 @@ Declare it with the built-in `:Plugins` manager, then `:PluginSync`:
 ```lua
 btv.plugins({
   {
-    "davidrios/bemtvi-line",
+    "bemtvi/bemtvi-line",
     config = function()
       require("bemtvi-line").setup({ options = { theme = "auto" } })
     end,

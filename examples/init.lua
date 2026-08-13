@@ -17,7 +17,7 @@
 --   * `/local<CR>` then `n` / `N` -> section Y shows searchcount's `[idx/total]`
 
 -- Load the plugin straight from this repo (a local-dev spec: `dir` is never cloned).
--- A real config would instead use `{ "davidrios/bemtvi-line", config = ... }` + :PluginSync.
+-- A real config would instead use `{ "bemtvi/bemtvi-line", config = ... }` + :PluginSync.
 btv.plugins({
   {
     name = "bemtvi-line",
