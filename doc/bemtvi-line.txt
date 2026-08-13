@@ -1,25 +1,25 @@
-*bemtvi-line.txt*                          A lualine-style statusline for bemtvi
+*bemtvi-line.txt*                        A lualine-style statusline for bemtvi
 
 ==============================================================================
-Table of Contents                               *bemtvi-line-table-of-contents*
+Table of Contents                              *bemtvi-line-table-of-contents*
 
-1. How it works                                      |bemtvi-line-how-it-works|
-2. Setup                                                    |bemtvi-line-setup|
-3. Options                                                |bemtvi-line-options|
-4. Sections                                              |bemtvi-line-sections|
-  - Inactive sections                  |bemtvi-line-sections-inactive-sections|
-5. Components                                          |bemtvi-line-components|
-  - File-only components          |bemtvi-line-components-file-only-components|
-  - lsp notes                                |bemtvi-line-components-lsp-notes|
-  - searchcount notes                |bemtvi-line-components-searchcount-notes|
-6. Component options                            |bemtvi-line-component-options|
-7. Themes                                                  |bemtvi-line-themes|
-8. Highlights                                          |bemtvi-line-highlights|
-9. Extensions                                          |bemtvi-line-extensions|
-10. Tabline                                               |bemtvi-line-tabline|
-11. API                                                       |bemtvi-line-api|
-12. Custom components                           |bemtvi-line-custom-components|
-13. Not supported                                   |bemtvi-line-not-supported|
+1. How it works                                     |bemtvi-line-how-it-works|
+2. Setup                                                   |bemtvi-line-setup|
+3. Options                                               |bemtvi-line-options|
+4. Sections                                             |bemtvi-line-sections|
+  - Inactive sections                 |bemtvi-line-sections-inactive-sections|
+5. Components                                         |bemtvi-line-components|
+  - File-only components         |bemtvi-line-components-file-only-components|
+  - lsp notes                               |bemtvi-line-components-lsp-notes|
+  - searchcount notes               |bemtvi-line-components-searchcount-notes|
+6. Component options                           |bemtvi-line-component-options|
+7. Themes                                                 |bemtvi-line-themes|
+8. Highlights                                         |bemtvi-line-highlights|
+9. Extensions                                         |bemtvi-line-extensions|
+10. Tabline                                              |bemtvi-line-tabline|
+11. API                                                      |bemtvi-line-api|
+12. Custom components                          |bemtvi-line-custom-components|
+13. Not supported                                  |bemtvi-line-not-supported|
 
 A fully-featured, lualine-style statusline for bemtvi. It gives you lualine's
 config shape — `sections = { lualine_a = {...}, ... }`, themeable,
@@ -46,7 +46,7 @@ lualine-shaped config onto that primitive and lets the hot path stay in Rust.
 
 
 ==============================================================================
-1. How it works                                      *bemtvi-line-how-it-works*
+1. How it works                                     *bemtvi-line-how-it-works*
 
 bemtvi-line is a compiler, not a renderer. The editor already owns statusline
 rendering through the native `btv.statusline` segment registry: built-in
@@ -60,7 +60,7 @@ stays familiar.
 
 
 ==============================================================================
-2. Setup                                                    *bemtvi-line-setup*
+2. Setup                                                   *bemtvi-line-setup*
 
 `require("bemtvi-line").setup(config)` merges `config` over the defaults,
 validates it (an unknown component / theme / extension is a HARD ERROR naming
@@ -72,7 +72,7 @@ Install via `:Plugins` (the bemtvi plugin manager). A minimal config is just
 
 
 ==============================================================================
-3. Options                                                *bemtvi-line-options*
+3. Options                                               *bemtvi-line-options*
 
 `config.options` — global behaviour. Defaults shown.
 
@@ -115,7 +115,7 @@ blank bar (e.g. `{ "bemtvi-tree" }`).
 
 
 ==============================================================================
-4. Sections                                              *bemtvi-line-sections*
+4. Sections                                             *bemtvi-line-sections*
 
 `config.sections` is the active-window layout; `config.inactive_sections` the
 non-focused-window layout. Both take the six lualine section keys —
@@ -149,7 +149,7 @@ options):
 <
 
 
-INACTIVE SECTIONS                      *bemtvi-line-sections-inactive-sections*
+INACTIVE SECTIONS                     *bemtvi-line-sections-inactive-sections*
 
 `inactive_sections` renders for windows that do not hold focus, flat (no
 powerline arrows) in the dim `lualine_<section>_inactive` groups. Its default
@@ -157,7 +157,7 @@ is `{ lualine_c = { "filename" }, lualine_x = { "location" } }`.
 
 
 ==============================================================================
-5. Components                                          *bemtvi-line-components*
+5. Components                                         *bemtvi-line-components*
 
 The built-in component library. Each reads editor state through `btv.*` and
 re-renders only on its own events (never per frame).
@@ -211,7 +211,7 @@ re-renders only on its own events (never per frame).
 <
 
 
-FILE-ONLY COMPONENTS              *bemtvi-line-components-file-only-components*
+FILE-ONLY COMPONENTS             *bemtvi-line-components-file-only-components*
 
 A statusline is often rendered for something that is not a file: a file tree, a
 diff pane, the quickfix window, a terminal, any `btv.view` a plugin mounts. The
@@ -252,7 +252,7 @@ gated on a missing editor primitive is registered as deferred, so naming it in
 `sections` errors loud with the reason rather than rendering nothing.
 
 
-LSP NOTES                                    *bemtvi-line-components-lsp-notes*
+LSP NOTES                                   *bemtvi-line-components-lsp-notes*
 
 The `lsp` component answers two different questions. The client **names**
 answer "is a server attached" — space-separated, since two servers on one
@@ -288,7 +288,7 @@ all.
 <
 
 
-SEARCHCOUNT NOTES                    *bemtvi-line-components-searchcount-notes*
+SEARCHCOUNT NOTES                   *bemtvi-line-components-searchcount-notes*
 
 `searchcount` reads the pattern from the `/` register and enumerates its
 matches with `btv.buf.search`, using the buffer's EFFECTIVE `'regexsyntax'`
@@ -304,7 +304,7 @@ pattern reuses the cached list (the cursor's index is a bisection over it)
 
 
 ==============================================================================
-6. Component options                            *bemtvi-line-component-options*
+6. Component options                           *bemtvi-line-component-options*
 
 Any component table accepts these (the lualine shape):
 
@@ -338,7 +338,7 @@ component-specific options (e.g. `filename.path`, `diagnostics.symbols`,
 
 
 ==============================================================================
-7. Themes                                                  *bemtvi-line-themes*
+7. Themes                                                 *bemtvi-line-themes*
 
 `options.theme` is one of:
 
@@ -381,7 +381,7 @@ highlight group to link to. Add one with `register_theme` (see API).
 
 
 ==============================================================================
-8. Highlights                                          *bemtvi-line-highlights*
+8. Highlights                                         *bemtvi-line-highlights*
 
 The theme defines a group per (section, mode) under LUALINE's own naming —
 `lualine_a_normal`, `lualine_a_insert`, `lualine_c_inactive`, … — so a
@@ -394,7 +394,7 @@ other's).
 
 
 ==============================================================================
-9. Extensions                                          *bemtvi-line-extensions*
+9. Extensions                                         *bemtvi-line-extensions*
 
 `config.extensions` is a list of per-filetype layout overrides. When the
 rendered window's buffer has one of an extension's filetypes, the
@@ -417,7 +417,7 @@ Add a bundled extension with `register_extension` (see API).
 
 
 ==============================================================================
-10. Tabline                                               *bemtvi-line-tabline*
+10. Tabline                                              *bemtvi-line-tabline*
 
 `config.tabline` takes the same section keys as `sections`. If non-empty,
 bemtvi-line lowers it onto the core `'tabline'` %-format engine (a segment
@@ -433,7 +433,7 @@ screen row.
 
 
 ==============================================================================
-11. API                                                       *bemtvi-line-api*
+11. API                                                      *bemtvi-line-api*
 
 >lua
     local line = require("bemtvi-line")
@@ -461,7 +461,7 @@ Call the `register_*` functions BEFORE `setup()` so the config sees them.
 
 
 ==============================================================================
-12. Custom components                           *bemtvi-line-custom-components*
+12. Custom components                          *bemtvi-line-custom-components*
 
 A component is `{ events = {...}, provide = function(ctx, opts) -> result }`.
 `provide` is PURE — it reads editor state and returns cells; it runs only
@@ -519,7 +519,7 @@ arrow's background over a collapsed section.
 
 
 ==============================================================================
-13. Not supported                                   *bemtvi-line-not-supported*
+13. Not supported                                  *bemtvi-line-not-supported*
 
 - Winbar — needs a `'winbar'` option in bemtvi-core (a per-window
     bar is a separate, large core feature spanning every client
